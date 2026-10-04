@@ -10,6 +10,8 @@ dependencies = [
     "python-dotenv>=1.0",
     "yfinance>=0.2.50",
     "pandas>=2.0",
+    "torch>=2.4",
+    "transformers>=4.40",
 ]
 
 [project.optional-dependencies]

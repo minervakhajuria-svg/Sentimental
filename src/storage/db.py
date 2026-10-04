@@ -128,3 +128,45 @@ def replace_post_tickers(
     return len(rows)
 
 
+def pairs_to_score(con: duckdb.DuckDBPyConnection, model: str) -> list[tuple]:
+    """(post_id, ticker, title, body, n_tickers_in_post) with no score from `model` yet.
+
+    post_scores is the cache: anything already scored is skipped, so rerunning
+    only pays for new posts.
+    """
+    return con.execute(
+        """
+        SELECT pt.post_id, pt.ticker, p.title, p.body,
+               count(*) OVER (PARTITION BY pt.post_id) AS n_tickers
+        FROM post_tickers pt
+        JOIN posts p ON p.id = pt.post_id
+        WHERE NOT EXISTS (
+            SELECT 1 FROM post_scores s
+            WHERE s.post_id = pt.post_id AND s.ticker = pt.ticker AND s.model = ?
+        )
+        ORDER BY p.created_at, pt.post_id, pt.ticker
+        """,
+        [model],
+    ).fetchall()
+
+
+def insert_scores(con: duckdb.DuckDBPyConnection, rows: list[tuple]) -> int:
+    """Insert (post_id, ticker, model, label, score, scored_at) rows.
+
+    Existing scores are never overwritten (CLAUDE.md §8): a later model gets
+    its own `model` value instead.
+    """
+    if not rows:
+        return 0
+    con.execute("BEGIN TRANSACTION")
+    try:
+        con.executemany(
+            """INSERT INTO post_scores (post_id, ticker, model, label, score, scored_at)
+               VALUES (?, ?, ?, ?, ?, ?) ON CONFLICT DO NOTHING""",
+            rows,
+        )
+        con.execute("COMMIT")
+    except Exception:
+        con.execute("ROLLBACK")
+        raise
+    return len(rows)

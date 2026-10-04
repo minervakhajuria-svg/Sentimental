@@ -58,3 +58,29 @@ extraction:
     resistance, hold, holding, invest, investing, trade, trading, yolo, dd,
   ]
 
+scoring:
+  model_name: ProsusAI/finbert
+  batch_size: 16
+  max_chars: 2000        # text per (post, ticker) sent to the model
+  commit_every: 256      # pairs per committed chunk
+
+signals:
+  sentiment_model: finbert
+  # Matches below this confidence are ignored (0.5 keeps bare matches).
+  min_match_confidence: 0.5
+  source_weights:
+    reddit: 1.0
+  author_cap_per_ticker_week: 5
+  baseline_days: 30
+  # Baseline std floor (in weighted mentions/day) so quiet tickers don't blow up.
+  attention_std_floor: 1.0
+  attention_clip: 10
+  # Eligibility
+  min_weekly_mentions: 20
+  min_distinct_authors: 5
+  composite_weights:
+    attention: 0.35
+    sentiment: 0.35
+    momentum: 0.15
+    breadth: 0.15
+  top_n: 20

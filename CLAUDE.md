@@ -185,3 +185,10 @@ The assumption "chatter leads price" is **unproven**; test it.
   - Refresh weekly: `python -m jobs.build_universe` (~20-30 min).
   - Match types: `cashtag` (0.95), `alias` (0.75, curated `aliases.csv` with a case-sensitivity flag for common words like Apple/Visa/Ford), `bare` (0.5). Bare matches need finance context and length >= 2, must not be on the blocklist, and are skipped on "shouting" lines (>= 3 all-caps non-ticker words). URLs and r/ or u/ references are stripped first.
   - `collect_daily` tags new posts after collecting (exit 2 if tagging fails). Run `python -m jobs.extract_tickers --rebuild` after editing aliases or the blocklist.
+- **Phase 3 (scoring and weekly ranking): done 2026-10-04.**
+  - Week = Saturday 00:00 UTC through Friday 23:59 UTC (weekend chatter counts toward the following trading week), keyed by its Monday in `weekly_signals.week_start`.
+  - Multi-ticker posts are scored on the sentences that mention each ticker; single-ticker posts on the whole text. `post_scores` doubles as the scoring cache; scores are inserted, never overwritten.
+  - Filters before aggregation: exact reposts (same `content_hash`, keep earliest), per-author cap per ticker per 7-day block, matches below `min_match_confidence`. Author weight is fixed at 1 until phase 6.
+  - Attention baseline = 30 days before the week, zero-filled daily weighted mentions, std floored and z clipped (config). Missing last-week sentiment gives NULL momentum, which contributes 0 to the composite.
+  - `weekly_signals` stores every eligible ticker; the two lists are queries over it (`signals.composite.ranked_lists`). Context columns stay NULL until phase 5.
+  - Run: `python -m jobs.rank_weekly [--week-ending YYYY-MM-DD] [--no-score]`. The first run downloads FinBERT (~440 MB) from Hugging Face.
