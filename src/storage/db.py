@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Iterable
 
 import duckdb
+import pandas as pd
 
 from collectors.base import Post
 
@@ -170,3 +171,53 @@ def insert_scores(con: duckdb.DuckDBPyConnection, rows: list[tuple]) -> int:
         con.execute("ROLLBACK")
         raise
     return len(rows)
+
+
+PRICE_COLUMNS = ["ticker", "date", "open", "high", "low", "close", "volume"]
+
+
+def upsert_prices(con: duckdb.DuckDBPyConnection, bars) -> int:
+    """Insert or overwrite daily bars (a DataFrame with PRICE_COLUMNS).
+
+    Overwrite, not skip: adjusted prices change after splits and dividends, and
+    the latest download is the consistent one.
+    """
+    if bars is None or len(bars) == 0:
+        return 0
+    rows = [
+        [r.ticker, r.date, r.open, r.high, r.low, r.close,
+         None if r.volume != r.volume else int(r.volume)]
+        for r in bars[PRICE_COLUMNS].itertuples(index=False)
+    ]
+    con.execute("BEGIN TRANSACTION")
+    try:
+        con.executemany(
+            f"""INSERT INTO prices_daily ({", ".join(PRICE_COLUMNS)}) VALUES (?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT (ticker, date) DO UPDATE SET
+                    open = excluded.open, high = excluded.high, low = excluded.low,
+                    close = excluded.close, volume = excluded.volume""",
+            rows,
+        )
+        con.execute("COMMIT")
+    except Exception:
+        con.execute("ROLLBACK")
+        raise
+    return len(rows)
+
+
+def load_prices(con: duckdb.DuckDBPyConnection, tickers: list[str], start, end):
+    """Bars for `tickers` with start <= date <= end, as a DataFrame."""
+    return con.execute(
+        f"""SELECT {", ".join(PRICE_COLUMNS)} FROM prices_daily
+            WHERE ticker IN (SELECT unnest(?)) AND date >= ? AND date <= ?
+            ORDER BY ticker, date""",
+        [list(tickers), start, end],
+    ).df().assign(date=lambda d: pd.to_datetime(d["date"]).dt.date)
+
+
+def recently_mentioned(con: duckdb.DuckDBPyConnection, since) -> list[str]:
+    return [r[0] for r in con.execute(
+        """SELECT DISTINCT pt.ticker FROM post_tickers pt JOIN posts p ON p.id = pt.post_id
+           WHERE p.created_at >= ? ORDER BY 1""",
+        [since],
+    ).fetchall()]

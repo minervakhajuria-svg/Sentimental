@@ -84,3 +84,23 @@ signals:
     momentum: 0.15
     breadth: 0.15
   top_n: 20
+
+prices:
+  # Daily: refresh this many days of bars for tickers mentioned recently.
+  daily_refresh_days: 10
+  recent_mention_days: 30
+  # Weekly: re-fetch this many days for eligible tickers before computing
+  # context, so split/dividend adjustments are consistent across the window.
+  context_days: 60
+
+context:
+  ret_short_sessions: 5
+  ret_long_sessions: 21      # ~30 calendar days
+  rel_volume_baseline_days: 30
+  early_chatter:
+    top_quantile: 0.9        # composite in the top decile (bull or bear)
+    max_abs_ret_5d: 0.03     # price hasn't moved yet
+    min_rel_volume: 1.2      # but volume is picking up
+  divergence_warning:        # rising volume + falling price + bullish chatter
+    min_rel_volume: 1.2
+    min_price_drop: 0.02     # 5-day fall bigger than this counts as "falling"

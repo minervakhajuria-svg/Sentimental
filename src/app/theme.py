@@ -88,6 +88,17 @@ h1 {{ letter-spacing: -1px; }}
 .sm-bar .fill {{ height: 8px; border-radius: 4px; }}
 .sm-bar .val {{ flex: 0 0 52px; text-align: right; font-family: {MONO}; font-size: 14px; }}
 
+.sm-badge {{ display: inline-block; padding: 3px 8px; border-radius: 6px; font-family: {MONO};
+  font-size: 11px; letter-spacing: 1px; border: 1px solid currentColor; }}
+.sm-warn {{ display: flex; gap: 14px; align-items: baseline; padding: 12px 0;
+  border-bottom: 1px solid {ROW_BORDER}; }}
+.sm-warn:last-child {{ border-bottom: none; }}
+.sm-warn .sym {{ font-family: {MONO}; font-weight: 700; flex: 0 0 64px; color: {TEXT}; }}
+.sm-warn .why {{ color: {MUTED}; font-size: 14px; line-height: 1.45; }}
+.sm-kv {{ display: flex; flex-wrap: wrap; gap: 28px; margin-top: 14px; font-family: {MONO};
+  font-size: 12px; color: {MUTED}; }}
+.sm-kv b {{ color: {TEXT}; font-weight: 500; margin-left: 6px; }}
+
 .sm-posts {{ overflow-x: auto; }}
 .sm-post {{ display: flex; align-items: center; gap: 16px; padding: 14px 0; border-bottom: 1px solid {ROW_BORDER}; }}
 .sm-post .src {{ flex: 0 0 112px; min-width: 0; overflow-wrap: anywhere; font-family: {MONO}; font-size: 11px; color: {MUTED}; line-height: 1.5; }}
@@ -249,3 +260,34 @@ def chart_config(chart: alt.Chart) -> alt.Chart:
                         titleFont="JetBrains Mono", titleFontWeight=400, titleFontSize=11,
                         gridColor=GRID, domainColor=BORDER, tickColor=BORDER, labelFontSize=11)
     )
+
+
+def badge(text: str, color: str = GREEN) -> str:
+    return f'<span class="sm-badge" style="color:{color}">{escape(text)}</span>'
+
+
+def fmt_pct(v) -> str:
+    return "–" if v is None or pd.isna(v) else f"{v:+.1%}"
+
+
+def fmt_x(v) -> str:
+    return "–" if v is None or pd.isna(v) else f"{v:.2f}×"
+
+
+def divergence_list(df: pd.DataFrame) -> str:
+    """Rows: ticker, ret_5d, rel_volume, sentiment."""
+    rows = "".join(
+        f'<div class="sm-warn"><div class="sym">{escape(r.ticker)}</div>'
+        f'<div class="why">Bullish chatter (sentiment {r.sentiment:+.2f}) while the price fell '
+        f'{abs(r.ret_5d):.1%} this week on {r.rel_volume:.1f}× normal volume. '
+        f'The crowd may be buying into selling.</div></div>'
+        for r in df.itertuples()
+    )
+    return f'<div>{rows}</div>'
+
+
+def context_kv(summary: dict) -> str:
+    items = [("5D RETURN", fmt_pct(summary.get("ret_5d"))), ("30D RETURN", fmt_pct(summary.get("ret_30d"))),
+             ("REL. VOLUME", fmt_x(summary.get("rel_volume"))),
+             ("UP/DOWN VOLUME", fmt_x(summary.get("updown_vol_ratio")))]
+    return '<div class="sm-kv">' + "".join(f"<span>{k}<b>{v}</b></span>" for k, v in items) + "</div>"

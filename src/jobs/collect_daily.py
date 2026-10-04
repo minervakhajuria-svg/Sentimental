@@ -1,5 +1,5 @@
 """Daily collection job: fetch recent posts from every source, upsert them,
-then tag new posts with tickers.
+tag new posts with tickers, then refresh recent daily prices.
 
 Run once a day (cron/Task Scheduler):
     python -m jobs.collect_daily [--config config.yaml]
@@ -18,7 +18,9 @@ from datetime import timedelta
 
 from collectors.base import Collector
 from collectors.reddit import RedditCollector, utc_now
+from jobs import collect_prices as collect_prices_job
 from jobs import extract_tickers as extract_tickers_job
+from market.prices import MarketDataProvider
 from settings import load_config, setup_logging
 from storage import db
 
@@ -33,13 +35,14 @@ def build_collectors(cfg: dict) -> list[Collector]:
 
 
 def run(cfg: dict, collectors: list[Collector] | None = None,
-        extract_tickers: bool = True) -> int:
+        extract_tickers: bool = True, price_provider: MarketDataProvider | None = None,
+        collect_prices: bool = True) -> int:
     since = utc_now() - timedelta(hours=cfg["collect"]["lookback_hours"])
     collectors = collectors if collectors is not None else build_collectors(cfg)
     con = db.connect(cfg["storage"]["db_path"])
     failures = 0  # collectors with any failure
     dead = 0      # collectors that produced nothing because everything failed
-    extraction_failed = False
+    followup_failed = False
     try:
         for collector in collectors:
             try:
@@ -66,13 +69,21 @@ def run(cfg: dict, collectors: list[Collector] | None = None,
             except Exception:
                 # Collected posts are already saved; tagging can be rerun later.
                 log.exception("ticker extraction failed")
-                extraction_failed = True
+                followup_failed = True
+        if collect_prices:
+            try:
+                provider = price_provider or collect_prices_job.provider_from_config(cfg)
+                collect_prices_job.refresh_recent(con, provider, cfg)
+            except Exception:
+                # Prices are context only; a gap is refilled by the next run.
+                log.exception("price refresh failed")
+                followup_failed = True
     finally:
         con.close()
 
     if dead == len(collectors):
         return EXIT_FAILED
-    if failures or extraction_failed:
+    if failures or followup_failed:
         return EXIT_PARTIAL
     return EXIT_OK
 

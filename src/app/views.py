@@ -17,6 +17,7 @@ import duckdb
 import streamlit as st
 
 from app import queries, theme
+from market.context import divergence_warning
 from settings import load_config
 
 APP_NAME = "Sentimental"
@@ -25,6 +26,8 @@ DISCLAIMER = "Screening aid only, not investment advice."
 cfg = load_config(os.environ.get("SENTIMENT_CONFIG"))
 MODEL = cfg["signals"]["sentiment_model"]
 TOP_N = cfg["signals"]["top_n"]
+CONTEXT_CFG = cfg["context"]
+ROW_PX = 40
 
 # Set by streamlit_app.py once the page objects exist, so a click in the
 # rankings table can jump to the drill-down.
@@ -97,9 +100,9 @@ def ranked_table(title: str, dot: str, df, key: str) -> None:
         if df.empty:
             html('<div class="sm-muted">No tickers qualified this week.</div>')
             return
-        # Tall enough to show every row without an inner scrollbar.
+        # Fixed row height, and a table tall enough to show every row without scrolling.
         event = st.dataframe(theme.style_table(df), column_config=RANK_COLUMNS, hide_index=True,
-                             height=35 * (len(df) + 1) + 3, on_select="rerun",
+                             row_height=ROW_PX, height=ROW_PX * (len(df) + 1) + 4, on_select="rerun",
                              selection_mode="single-row", width="stretch", key=key)
         rows = event.selection.rows
         if rows:
@@ -146,10 +149,22 @@ def rankings() -> None:
                         tone="red"))
 
     ranked_table("Heating up · bullish", theme.GREEN, bull, "bull")
+
+    warnings = bull[bull.apply(lambda r: divergence_warning(r, CONTEXT_CFG), axis=1)] if not bull.empty else bull
+    if not warnings.empty:
+        with st.container(key="card-warnings"):
+            html(theme.label("Divergence · volume up, price down, chatter bullish", dot=theme.RED))
+            html(theme.divergence_list(warnings))
+
     ranked_table("Heating up · bearish", theme.RED, bear, "bear")
     if bull["ret_5d"].isna().all() and bear["ret_5d"].isna().all():
-        html('<div class="sm-muted">Price and volume columns fill in once price data is '
-             'collected (phase 5).</div>')
+        html('<div class="sm-muted">No price data for this week yet: run '
+             '<code>python -m jobs.collect_prices</code> or re-run the ranking.</div>')
+    else:
+        html('<div class="sm-muted">Price and volume are context only and never affect the ranking. '
+             'Early chatter = top-decile composite, price moved less than '
+             f'{CONTEXT_CFG["early_chatter"]["max_abs_ret_5d"]:.0%} and volume above '
+             f'{CONTEXT_CFG["early_chatter"]["min_rel_volume"]}× normal.</div>')
 
 
 def trend_chart(trend):
@@ -165,6 +180,21 @@ def trend_chart(trend):
         y=alt.Y("sentiment:Q", title="MEAN SENTIMENT", scale=alt.Scale(domain=[-1, 1])),
     ).transform_filter("isValid(datum.sentiment)")
     chart = alt.layer(bars, line).resolve_scale(y="independent").properties(height=280)
+    return theme.chart_config(chart)
+
+
+def price_chart(prices):
+    """Close line over volume bars, same layered style as the mentions chart."""
+    base = alt.Chart(prices).encode(x=alt.X("date:T", title=None, axis=alt.Axis(format="%d %b")))
+    vol = base.mark_bar(color=theme.NEUTRAL_BAR, opacity=0.85).encode(
+        y=alt.Y("volume:Q", title="VOLUME", axis=alt.Axis(format="~s")),
+        tooltip=[alt.Tooltip("date:T", format="%d %b %Y"), alt.Tooltip("close:Q", format=",.2f"),
+                 alt.Tooltip("volume:Q", format=",.0f")],
+    )
+    line = base.mark_line(color=theme.GREEN, strokeWidth=2.5).encode(
+        y=alt.Y("close:Q", title="CLOSE", scale=alt.Scale(zero=False)),
+    )
+    chart = alt.layer(vol, line).resolve_scale(y="independent").properties(height=260)
     return theme.chart_config(chart)
 
 
@@ -187,6 +217,7 @@ def drilldown() -> None:
         today = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
         end = week.end if week else today + timedelta(days=1)
         trend = queries.daily_trend(con, ticker, end, days, MODEL)
+        prices = queries.daily_prices(con, ticker, end, days)
         history = queries.weekly_history(con, ticker)
         name = queries.company_name(con, ticker)
         if week:
@@ -196,6 +227,15 @@ def drilldown() -> None:
 
     html(theme.label(f"Sentiment · {week_label(week_start)}" if week else "Sentiment"))
     html(theme.title(name or ticker, ticker if name else None))
+    if week:
+        badges = []
+        if summary.get("early_chatter_flag"):
+            badges.append(theme.badge("EARLY CHATTER"))
+        if divergence_warning({**summary, "sentiment": summary["ranked_sentiment"] or 0}, CONTEXT_CFG):
+            badges.append(theme.badge("DIVERGENCE: VOLUME UP, PRICE DOWN", theme.RED))
+        if badges:
+            html('<div style="display:flex;gap:10px;flex-wrap:wrap;margin:4px 0 8px">'
+                 + "".join(badges) + "</div>")
 
     if week:
         left, right = st.columns([1, 2])
@@ -216,10 +256,15 @@ def drilldown() -> None:
     with st.container(key="card-trend"):
         html(theme.label(f"Mentions and sentiment · last {days} days"))
         st.altair_chart(trend_chart(trend), width="stretch")
-        if trend["close"].notna().any():
-            st.line_chart(trend.set_index("day")["close"], height=200, color=theme.GREEN)
+
+    with st.container(key="card-price"):
+        html(theme.label(f"Price and volume · last {days} days"))
+        if prices.empty:
+            html('<div class="sm-muted">No price data for this ticker yet.</div>')
         else:
-            html('<div class="sm-muted">Price chart appears once price data is collected (phase 5).</div>')
+            st.altair_chart(price_chart(prices), width="stretch")
+        if week:
+            html(theme.context_kv(summary))
 
     with st.container(key="card-history"):
         html(theme.label("Weekly signals"))

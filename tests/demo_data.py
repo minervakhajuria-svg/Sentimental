@@ -20,6 +20,8 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "src"))
 
+import pandas as pd  # noqa: E402
+
 from collectors.base import Post, content_hash, hash_author  # noqa: E402
 from jobs.rank_weekly import rank  # noqa: E402
 from signals.aggregate import Week  # noqa: E402
@@ -48,7 +50,19 @@ CFG = {
         "composite_weights": {"attention": 0.35, "sentiment": 0.35, "momentum": 0.15, "breadth": 0.15},
         "top_n": 20,
     },
+    "prices": {"context_days": 60},
+    "context": {
+        "ret_short_sessions": 5, "ret_long_sessions": 21, "rel_volume_baseline_days": 30,
+        "early_chatter": {"top_quantile": 0.9, "max_abs_ret_5d": 0.03, "min_rel_volume": 1.2},
+        "divergence_warning": {"min_rel_volume": 1.2, "min_price_drop": 0.02},
+    },
 }
+
+# Final-week price story per ticker: (daily drift, volume multiplier).
+#   NVDA  price flat, volume up        -> early chatter (talk before price)
+#   GME   price falling on heavy volume while chatter is bullish -> divergence warning
+#   INTC  price falling
+PRICE_STORY = {"NVDA": (0.0005, 1.8), "GME": (-0.02, 1.7), "INTC": (-0.015, 1.3)}
 
 
 def _plan(ticker: str, weeks_ago: int) -> tuple[float, float]:
@@ -60,6 +74,25 @@ def _plan(ticker: str, weeks_ago: int) -> tuple[float, float]:
     if ticker == "GME":
         return (5.0, 0.35) if weeks_ago == 0 else (2.0, 0.3)
     return 3.0, {"TSLA": -0.15, "AAPL": 0.2, "AMD": 0.1, "PLTR": 0.25, "MSFT": 0.05}[ticker]
+
+
+def _prices(rng: random.Random, last: Week) -> pd.DataFrame:
+    """Invented weekday bars from well before the first ranked week to the last Friday."""
+    rows = []
+    start = last.friday - timedelta(weeks=N_WEEKS + 10)
+    for ticker in COMPANIES:
+        price, base_vol = rng.uniform(40, 400), rng.uniform(5e6, 6e7)
+        d = start
+        while d <= last.friday:
+            if d.weekday() < 5:
+                final_week = d >= last.start.date()
+                drift, vol_mult = PRICE_STORY.get(ticker, (0.0, 1.0)) if final_week else (0.0, 1.0)
+                price *= 1 + drift + rng.gauss(0, 0.004 if final_week else 0.012)
+                vol = base_vol * vol_mult * rng.uniform(0.85, 1.15)
+                rows.append({"ticker": ticker, "date": d, "open": price * 0.995,
+                             "high": price * 1.01, "low": price * 0.99, "close": price, "volume": vol})
+            d += timedelta(days=1)
+    return pd.DataFrame(rows)
 
 
 def build(path: Path, seed: int = 7) -> list[Week]:
@@ -102,6 +135,7 @@ def build(path: Path, seed: int = 7) -> list[Week]:
                 tags[pid] = [Match(ticker, "cashtag", 0.95)]
                 label = "pos" if score > 0.2 else "neg" if score < -0.2 else "neu"
                 scores.append((pid, ticker, "finbert", label, round(score, 3), datetime(2026, 10, 3)))
+    db.upsert_prices(con, _prices(rng, last))
     db.upsert_posts(con, posts)
     db.replace_post_tickers(con, tags)
     db.insert_scores(con, scores)

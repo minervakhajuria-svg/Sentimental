@@ -1,7 +1,7 @@
 """Market data behind an interface, so yfinance can be swapped for a paid feed.
 
-Phase 2 only needs what the universe filters use: average dollar volume and
-market cap. Daily OHLCV for the context columns arrives in phase 5.
+Used for the universe filters (average dollar volume, market cap) and for the
+daily OHLCV behind the context columns.
 
 Market data is never an input to the sentiment ranking (see CLAUDE.md §10).
 """
@@ -11,6 +11,9 @@ from __future__ import annotations
 import logging
 import time
 from abc import ABC, abstractmethod
+from datetime import date
+
+import pandas as pd
 
 log = logging.getLogger(__name__)
 
@@ -23,6 +26,14 @@ class MarketDataProvider(ABC):
     @abstractmethod
     def market_caps(self, tickers: list[str]) -> dict[str, float]:
         """Current market cap in USD. Missing tickers are omitted."""
+
+    def daily_bars(self, tickers: list[str], start: date, end: date) -> pd.DataFrame:
+        """Split- and dividend-adjusted daily bars for sessions in [start, end).
+
+        Columns: ticker, date, open, high, low, close, volume. Missing tickers
+        are omitted.
+        """
+        raise NotImplementedError
 
 
 def to_yahoo(ticker: str) -> str:
@@ -80,3 +91,31 @@ class YFinanceProvider(MarketDataProvider):
                 log.info("market caps: %d/%d tickers done", n, len(tickers))
                 time.sleep(self.pause_seconds)
         return out
+
+    def daily_bars(self, tickers: list[str], start: date, end: date) -> pd.DataFrame:
+        import yfinance as yf
+
+        frames = []
+        for i in range(0, len(tickers), self.chunk_size):
+            chunk = tickers[i : i + self.chunk_size]
+            yahoo = {to_yahoo(t): t for t in chunk}
+            try:
+                # auto_adjust: returns across splits and dividends stay correct.
+                df = yf.download(list(yahoo), start=start, end=end, progress=False,
+                                 auto_adjust=True, threads=True, group_by="column",
+                                 multi_level_index=True)
+            except Exception:
+                log.exception("bar download failed for chunk starting %s", chunk[0])
+                continue
+            if df.empty:
+                continue
+            long = df.stack(level="Ticker", future_stack=True).reset_index()
+            long.columns = [str(c).lower() for c in long.columns]
+            long = long.rename(columns={"ticker": "ysym"}).dropna(subset=["close"])
+            long["ticker"] = long["ysym"].map(yahoo)
+            long["date"] = pd.to_datetime(long["date"]).dt.date
+            frames.append(long[["ticker", "date", "open", "high", "low", "close", "volume"]])
+            time.sleep(self.pause_seconds)
+        if not frames:
+            return pd.DataFrame(columns=["ticker", "date", "open", "high", "low", "close", "volume"])
+        return pd.concat(frames, ignore_index=True)

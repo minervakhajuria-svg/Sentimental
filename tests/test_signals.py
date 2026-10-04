@@ -17,6 +17,12 @@ from tickers.universe import save_universe
 
 WEEK = Week.ending(date(2026, 10, 2))  # Sat 26 Sep .. Fri 2 Oct
 
+CONTEXT_CFG = {
+    "ret_short_sessions": 5, "ret_long_sessions": 21, "rel_volume_baseline_days": 30,
+    "early_chatter": {"top_quantile": 0.9, "max_abs_ret_5d": 0.03, "min_rel_volume": 1.2},
+    "divergence_warning": {"min_rel_volume": 1.2, "min_price_drop": 0.02},
+}
+
 SCFG = {
     "sentiment_model": "fake",
     "min_match_confidence": 0.5,
@@ -219,7 +225,8 @@ def test_rank_produces_both_lists(con):
         b.add("COOL", _day(d), 0.5)
 
     cfg = {"signals": SCFG, "extraction": {}, "scoring": {},
-           "universe": {"exchanges": ["NASDAQ"], "min_market_cap": 1, "min_avg_dollar_volume": 1}}
+           "universe": {"exchanges": ["NASDAQ"], "min_market_cap": 1, "min_avg_dollar_volume": 1},
+           "prices": {"context_days": 60}, "context": CONTEXT_CFG}
     bull, bear = rank(con, cfg, WEEK, scorer=None)
 
     assert bull["ticker"].tolist()[0] == "BULL"

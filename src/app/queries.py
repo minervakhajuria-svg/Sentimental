@@ -172,11 +172,15 @@ def week_summary(con: duckdb.DuckDBPyConnection, ticker: str, week: Week, model:
         [model, ticker, week.start, week.end],
     ).fetchone()
     summary = dict(zip(["posts", "mean_score", "pos", "neu", "neg"], row))
+    cols = ["sentiment", "momentum", "ret_5d", "ret_30d", "rel_volume", "updown_vol_ratio",
+            "early_chatter_flag"]
     signal = con.execute(
-        "SELECT sentiment, momentum FROM weekly_signals WHERE week_start = ? AND ticker = ?",
+        f"SELECT {', '.join(cols)} FROM weekly_signals WHERE week_start = ? AND ticker = ?",
         [week.week_start, ticker],
     ).fetchone()
-    summary["ranked_sentiment"], summary["momentum"] = signal if signal else (None, None)
+    values = dict(zip(cols, signal)) if signal else dict.fromkeys(cols)
+    summary["ranked_sentiment"] = values.pop("sentiment")
+    summary.update(values)
     return summary
 
 
@@ -194,4 +198,15 @@ def community_breakdown(con: duckdb.DuckDBPyConnection, ticker: str, week: Week,
         GROUP BY 1 ORDER BY posts DESC
         """,
         [model, ticker, week.start, week.end],
+    ).df()
+
+
+def daily_prices(con: duckdb.DuckDBPyConnection, ticker: str, end: datetime,
+                 days: int) -> pd.DataFrame:
+    """Close and volume for the drill-down price chart (sessions only)."""
+    return con.execute(
+        """SELECT date, close, volume FROM prices_daily
+           WHERE ticker = ? AND date >= CAST(? AS DATE) AND date < CAST(? AS DATE)
+           ORDER BY date""",
+        [ticker, end - timedelta(days=days), end],
     ).df()

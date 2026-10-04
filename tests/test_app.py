@@ -48,7 +48,9 @@ def test_daily_trend_has_every_day(con, demo):
     assert len(trend) == 30
     assert trend["day"].iloc[-1].date() == (week.end - timedelta(days=1)).date()
     assert trend["mentions"].min() >= 0
-    assert trend["close"].isna().all()  # no price data until phase 5
+    weekday = trend["day"].dt.weekday < 5
+    assert trend.loc[weekday, "close"].notna().all()   # sessions have a close
+    assert trend.loc[~weekday, "close"].isna().all()   # weekends don't
 
 
 def test_top_posts_are_from_the_week_and_sorted(con, demo):
@@ -135,3 +137,12 @@ def test_gauge_maps_sentiment_to_0_100():
     assert ">0<" in theme.gauge(-1.0, None, True)
     assert "Bearish" in theme.gauge(-0.5, -0.2, True)
     assert "–" in theme.gauge(None, None, False)
+
+
+def test_demo_storylines_set_context_flags(con, demo):
+    week = demo[1][-1]
+    rows = con.execute("SELECT ticker, ret_5d, rel_volume, early_chatter_flag FROM weekly_signals "
+                       "WHERE week_start = ?", [week.week_start]).df().set_index("ticker")
+    assert rows.loc["NVDA", "early_chatter_flag"]  # flat price, rising volume, top composite
+    assert rows.loc["INTC", "ret_5d"] < 0
+    assert rows["rel_volume"].notna().all()

@@ -56,10 +56,14 @@ def write_signals(con: duckdb.DuckDBPyConnection, week: Week, signals: pd.DataFr
     for ticker, r in signals.iterrows():
         rec = {c: None for c in SIGNAL_COLUMNS}
         rec.update(week_start=week.week_start, ticker=ticker)
-        for c in ("mentions", "attention_z", "sentiment", "sentiment_prev",
-                  "momentum", "breadth", "composite_bull", "composite_bear"):
-            v = r[c]
-            rec[c] = None if pd.isna(v) else (int(v) if c == "mentions" else float(v))
+        for c in ("mentions", "attention_z", "sentiment", "sentiment_prev", "momentum",
+                  "breadth", "composite_bull", "composite_bear", "ret_5d", "ret_30d",
+                  "rel_volume", "updown_vol_ratio"):
+            v = r.get(c)
+            rec[c] = None if v is None or pd.isna(v) else (int(v) if c == "mentions" else float(v))
+        for c in ("insider_buy_flag", "early_chatter_flag"):
+            v = r.get(c)
+            rec[c] = None if v is None or pd.isna(v) else bool(v)
         rows.append([rec[c] for c in SIGNAL_COLUMNS])
     con.execute("BEGIN TRANSACTION")
     try:
