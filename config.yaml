@@ -27,6 +27,20 @@ reddit:
   # Retry/backoff for transient API errors (per community).
   max_retries: 3
   backoff_seconds: 5
+  # Bot accounts whose posts are dropped at collection.
+  exclude_authors: [AutoModerator, VisualMod]
+
+news:
+  enabled: true              # needs FINNHUB_API_KEY in .env (free, personal use)
+  max_tickers: 50            # one request each per run
+  mention_lookback_days: 7   # pick the most-mentioned tickers from this window
+  pause_seconds: 1.1         # free tier: 60 calls/minute
+
+stocktwits:
+  enabled: false             # needs STOCKTWITS_ACCESS_TOKEN from an approved app
+  max_tickers: 30
+  max_pages: 3               # 30 messages per page
+  pause_seconds: 2.0
 
 universe:
   exchanges: [NASDAQ, NYSE, NYSE American]
@@ -44,6 +58,7 @@ extraction:
     cashtag: 0.95
     alias: 0.75
     bare: 0.5
+    source: 0.9              # ticker named by the source itself (news "related", StockTwits symbol)
   # 1-letter tickers (F, T, V, C) only match via cashtag or alias.
   bare_min_length: 2
   # Skip bare matches on a line with this many all-caps non-ticker words.
@@ -70,7 +85,40 @@ signals:
   min_match_confidence: 0.5
   source_weights:
     reddit: 1.0
+    news: 1.0
+    stocktwits: 1.0
   author_cap_per_ticker_week: 5
+  noise:
+    # News has no upvotes: treat each article as if it had this much engagement.
+    engagement_floor:
+      news: 10
+    near_duplicates:
+      max_hamming: 3         # SimHash bits apart (of 64) to count as a repost
+      min_words: 12          # shorter posts are only checked for exact copies
+    spam_patterns:
+    # Regexes, single-quoted so backslashes stay literal.
+      - 'join (my|our) (discord|telegram)'
+      - 't\.me/'
+      - 'discord\.gg/'
+      - 'free (stock )?signals'
+      - '\bdm me\b'
+      - 'whatsapp'
+      - 'guaranteed (gains|returns|profit)'
+    authors:                 # weight 0 drops; missing age/karma is not penalised
+      reddit:
+        min_age_days: 30
+        new_account_weight: 0.25
+        min_karma: 100
+        low_karma_weight: 0.5
+      stocktwits:            # "karma" is follower count here
+        min_age_days: 30
+        new_account_weight: 0.25
+        min_karma: 5
+        low_karma_weight: 0.5
+    bots:                    # more posts than this in a week looks automated
+      sources: [reddit, stocktwits]
+      max_posts_per_week: 40
+      weight: 0.1
   baseline_days: 30
   # Baseline std floor (in weighted mentions/day) so quiet tickers don't blow up.
   attention_std_floor: 1.0

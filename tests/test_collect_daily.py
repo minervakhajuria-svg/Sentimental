@@ -109,3 +109,45 @@ def test_extraction_failure_is_partial_but_keeps_posts(cfg, reddit_fixture, fixe
     assert collect_daily.run(cfg, [collector(reddit_fixture, fixed_now)],
                              collect_prices=False) == collect_daily.EXIT_PARTIAL
     assert count_posts(cfg) == 5
+
+
+def test_one_source_missing_credentials_does_not_stop_others(cfg, monkeypatch):
+    """Reddit still awaiting approval: news keeps collecting, exit is partial."""
+    import json
+    from pathlib import Path
+    from collectors import news as news_mod
+
+    for k in ("REDDIT_CLIENT_ID", "REDDIT_CLIENT_SECRET", "REDDIT_USER_AGENT"):
+        monkeypatch.delenv(k, raising=False)
+    monkeypatch.setenv("FINNHUB_API_KEY", "KEY")
+    fixture = json.loads((Path(__file__).resolve().parent.parent / "fixtures" /
+                          "finnhub_company_news.json").read_text(encoding="utf-8"))
+    monkeypatch.setattr(news_mod, "get_json",
+                        lambda url, params=None, headers=None, sleep=None: fixture.get(params["symbol"], []))
+    monkeypatch.setattr(news_mod.time, "sleep", lambda s: None)
+
+    from storage import db
+    from tickers.universe import save_universe
+    cfg.update({
+        "reddit": {"communities": ["stocks"]},
+        "news": {"enabled": True, "max_tickers": 5, "mention_lookback_days": 7, "pause_seconds": 0},
+        "stocktwits": {"enabled": False},
+        "universe": {"exchanges": ["NASDAQ"], "min_market_cap": 1, "min_avg_dollar_volume": 1},
+        "extraction": {"confidence": {"cashtag": 0.95, "alias": 0.75, "bare": 0.5, "source": 0.9},
+                       "bare_min_length": 2, "shouting_min_words": 3, "finance_context_words": []},
+    })
+    con = db.connect(cfg["storage"]["db_path"])
+    save_universe(con, [
+        {"ticker": t, "company_name": t, "exchange": "NASDAQ", "market_cap": 1e9,
+         "avg_dollar_volume_30d": v, "updated_at": datetime(2026, 10, 4)}
+        for t, v in (("NVDA", 2e9), ("AMD", 1e9))
+    ], min_coverage=0.5)
+    con.close()
+
+    code = collect_daily.run(cfg, collect_prices=False)
+    assert code == collect_daily.EXIT_PARTIAL  # reddit couldn't start
+    with duckdb.connect(cfg["storage"]["db_path"]) as con:
+        rows = con.execute("SELECT post_id, ticker, match_type FROM post_tickers "
+                           "WHERE match_type = 'source' ORDER BY 1, 2").fetchall()
+    assert ("news:finnhub:9002", "AMD", "source") in rows
+    assert ("news:finnhub:9002", "NVDA", "source") in rows

@@ -124,3 +124,18 @@ def test_identical_texts_are_scored_once(tmp_path):
     score_pending(con, scorer, SCFG)
     assert scorer.calls == [["TSLA great"]]
     con.close()
+
+
+def test_scorer_agreement_with_source_tags(tmp_path):
+    from analysis.scorer_check import agreement
+    con = db.connect(tmp_path / "a.duckdb")
+    rows = [  # (post, tag, finbert)
+        ("a", 1.0, 0.7), ("b", -1.0, -0.4), ("c", 1.0, 0.02), ("d", -1.0, 0.6),
+    ]
+    for pid, tag, pred in rows:
+        con.execute("INSERT INTO post_scores VALUES (?, 'X', 'stocktwits_tag', 'pos', ?, now())", [pid, tag])
+        con.execute("INSERT INTO post_scores VALUES (?, 'X', 'finbert', 'neu', ?, now())", [pid, pred])
+    r = agreement(con, "finbert", "stocktwits_tag")
+    assert (r["pairs"], r["agree"], r["neutral"], r["opposite"]) == (4, 2, 1, 1)
+    assert r["accuracy"] == 0.5 and r["accuracy_when_decisive"] == pytest.approx(2 / 3)
+    con.close()

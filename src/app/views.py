@@ -247,7 +247,7 @@ def drilldown() -> None:
         with right, st.container(key="card-mix"):
             html(theme.label("Mention mix"))
             html(theme.mix_bar(summary["pos"], summary["neu"], summary["neg"]))
-            html('<div style="height:18px"></div>' + theme.label("By community"))
+            html('<div style="height:18px"></div>' + theme.label("By source"))
             if communities.empty:
                 html('<div class="sm-muted">No posts this week.</div>')
             else:

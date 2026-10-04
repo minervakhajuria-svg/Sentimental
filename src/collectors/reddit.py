@@ -52,6 +52,7 @@ class RedditCollector(Collector):
         backoff_seconds: float = 5,
         sleep: Callable[[float], None] = time.sleep,
         now: Callable[[], datetime] = utc_now,
+        exclude_authors: list[str] | None = None,
     ):
         # `reddit` is a praw.Reddit, or any object with the same `subreddit()`
         # shape; tests pass a fake built from fixtures so no live calls happen.
@@ -66,6 +67,9 @@ class RedditCollector(Collector):
         # Per-run cache: prolific authors post many times a day, and each
         # profile lookup is a separate API call.
         self._author_cache: dict[str, tuple[int | None, int | None]] = {}
+        # Subreddit bots (AutoModerator, VisualMod) post daily threads and
+        # summaries; they're not opinions, so they're dropped before hashing.
+        self.exclude_authors = {a.lower() for a in exclude_authors or []}
         self.failed_communities: list[str] = []
 
     @classmethod
@@ -91,6 +95,7 @@ class RedditCollector(Collector):
             fetch_author_details=cfg.get("fetch_author_details", True),
             max_retries=cfg.get("max_retries", 3),
             backoff_seconds=cfg.get("backoff_seconds", 5),
+            exclude_authors=cfg.get("exclude_authors"),
         )
 
     def fetch(self, since: datetime) -> Iterable[Post]:
@@ -106,6 +111,9 @@ class RedditCollector(Collector):
                 continue
             log.info("r/%s: %d posts since %s", community, len(submissions), since)
             for sub in submissions:
+                author = getattr(getattr(sub, "author", None), "name", None)
+                if author and author.lower() in self.exclude_authors:
+                    continue
                 try:
                     yield self._to_post(sub, community)
                 except Exception:

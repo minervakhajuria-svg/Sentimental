@@ -81,15 +81,17 @@ def upsert_posts(con: duckdb.DuckDBPyConnection, posts: Iterable[Post]) -> tuple
 
 
 def posts_without_tickers(con: duckdb.DuckDBPyConnection) -> list[tuple[str, str, str]]:
-    """(id, title, body) of posts with no post_tickers rows yet.
+    """(id, title, body) of posts the extractor hasn't tagged yet.
 
-    Posts that matched nothing get re-checked on later runs. That's cheap
+    Rows the source itself supplied (match_type 'source') don't count: the text
+    may mention other tickers too. Posts that matched nothing get re-checked on later runs. That's cheap
     (regex only) and means a universe refresh picks up newly listed tickers.
     """
     return con.execute(
         """
         SELECT id, title, body FROM posts p
-        WHERE NOT EXISTS (SELECT 1 FROM post_tickers t WHERE t.post_id = p.id)
+        WHERE NOT EXISTS (SELECT 1 FROM post_tickers t
+                          WHERE t.post_id = p.id AND t.match_type <> 'source')
         """
     ).fetchall()
 
@@ -105,7 +107,8 @@ def replace_post_tickers(
 
     `matches` maps post_id -> list of Match (ticker, match_type, confidence).
     Replace rather than append, so re-extracting after an alias or blocklist
-    change can also remove matches. Returns the number of rows written.
+    change can also remove matches. Source-supplied rows are kept, and win
+    over an extractor match for the same ticker. Returns rows written.
     """
     if not matches:
         return 0
@@ -116,10 +119,12 @@ def replace_post_tickers(
     ]
     con.execute("BEGIN TRANSACTION")
     try:
-        con.execute("DELETE FROM post_tickers WHERE post_id IN (SELECT unnest(?))", [list(matches)])
+        con.execute("DELETE FROM post_tickers WHERE post_id IN (SELECT unnest(?)) "
+                    "AND match_type <> 'source'", [list(matches)])
         if rows:
             con.executemany(
-                "INSERT INTO post_tickers (post_id, ticker, match_type, confidence) VALUES (?, ?, ?, ?)",
+                "INSERT INTO post_tickers (post_id, ticker, match_type, confidence) VALUES (?, ?, ?, ?) "
+                "ON CONFLICT DO NOTHING",
                 rows,
             )
         con.execute("COMMIT")
@@ -220,4 +225,59 @@ def recently_mentioned(con: duckdb.DuckDBPyConnection, since) -> list[str]:
         """SELECT DISTINCT pt.ticker FROM post_tickers pt JOIN posts p ON p.id = pt.post_id
            WHERE p.created_at >= ? ORDER BY 1""",
         [since],
+    ).fetchall()]
+
+
+def add_source_tags(con: duckdb.DuckDBPyConnection, posts, confidence: float,
+                    universe: set[str] | None = None) -> tuple[int, int]:
+    """Store tickers and sentiment tags that the source itself supplied.
+
+    Tickers become post_tickers rows with match_type 'source' (replacing any
+    extractor match for the same ticker). Tags become post_scores rows under
+    model '<source>_tag', never touching the FinBERT scores. Tickers outside
+    `universe` (when given) are skipped. Returns (ticker rows, tag rows).
+    """
+    tick_rows, tag_rows = [], []
+    for p in posts:
+        tickers = [t for t in dict.fromkeys(p.source_tickers) if universe is None or t in universe]
+        for t in tickers:
+            tick_rows.append([p.id, t, "source", confidence])
+            if p.source_sentiment is not None:
+                label = "pos" if p.source_sentiment > 0 else "neg"
+                tag_rows.append([p.id, t, f"{p.source}_tag", label, float(p.source_sentiment), p.collected_at])
+    if not tick_rows:
+        return 0, 0
+    con.execute("BEGIN TRANSACTION")
+    try:
+        con.executemany(
+            """INSERT INTO post_tickers (post_id, ticker, match_type, confidence) VALUES (?, ?, ?, ?)
+               ON CONFLICT (post_id, ticker) DO UPDATE SET
+                   match_type = excluded.match_type, confidence = excluded.confidence""",
+            tick_rows,
+        )
+        if tag_rows:
+            con.executemany(
+                "INSERT INTO post_scores VALUES (?, ?, ?, ?, ?, ?) ON CONFLICT DO NOTHING", tag_rows)
+        con.execute("COMMIT")
+    except Exception:
+        con.execute("ROLLBACK")
+        raise
+    return len(tick_rows), len(tag_rows)
+
+
+def top_liquid_tickers(con: duckdb.DuckDBPyConnection, n: int, cfg: dict) -> list[str]:
+    """The n most traded tickers that pass the universe floors."""
+    return [r[0] for r in con.execute(
+        """SELECT ticker FROM ticker_universe
+           WHERE exchange IN (SELECT unnest(?)) AND market_cap >= ? AND avg_dollar_volume_30d >= ?
+           ORDER BY avg_dollar_volume_30d DESC LIMIT ?""",
+        [cfg["exchanges"], cfg["min_market_cap"], cfg["min_avg_dollar_volume"], n],
+    ).fetchall()]
+
+
+def most_mentioned(con: duckdb.DuckDBPyConnection, since, n: int) -> list[str]:
+    return [r[0] for r in con.execute(
+        """SELECT pt.ticker FROM post_tickers pt JOIN posts p ON p.id = pt.post_id
+           WHERE p.created_at >= ? GROUP BY 1 ORDER BY count(*) DESC LIMIT ?""",
+        [since, n],
     ).fetchall()]

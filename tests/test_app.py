@@ -95,7 +95,7 @@ def test_drilldown_page_renders(demo, monkeypatch):
     assert not at.exception
     md = _markdown(at)
     assert "Intel Corporation" in md and ">INTC<" in md
-    for section in ("Weekly score", "Mention mix", "By community", "Top posts"):
+    for section in ("Weekly score", "Mention mix", "By source", "Top posts"):
         assert section in md
     assert "Bearish" in md  # INTC's storyline
 
@@ -121,7 +121,7 @@ def test_week_summary_and_breakdown(con, demo):
 def test_post_text_is_escaped():
     import pandas as pd
     from app import theme
-    df = pd.DataFrame([{"created_at": pd.Timestamp("2026-10-01"), "community": "<b>x</b>",
+    df = pd.DataFrame([{"created_at": pd.Timestamp("2026-10-01"), "source": "news", "community": "<b>x</b>",
                         "title": "<script>alert(1)</script>", "sentiment": 0.5, "label": "pos",
                         "engagement": 3, "match_type": "cashtag",
                         "url": 'https://example.com/"onmouseover="x'}])
@@ -146,3 +146,10 @@ def test_demo_storylines_set_context_flags(con, demo):
     assert rows.loc["NVDA", "early_chatter_flag"]  # flat price, rising volume, top composite
     assert rows.loc["INTC", "ret_5d"] < 0
     assert rows["rel_volume"].notna().all()
+
+
+def test_source_labels():
+    from app import theme
+    assert theme.source_label("reddit", "stocks") == "r/stocks"
+    assert theme.source_label("news", "Newswire") == "Newswire"
+    assert theme.source_label("stocktwits", "stocktwits") == "StockTwits"

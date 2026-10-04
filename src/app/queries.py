@@ -122,7 +122,8 @@ def top_posts(con: duckdb.DuckDBPyConnection, ticker: str, week: Week,
     """
     return con.execute(
         """
-        SELECT p.created_at, p.community, p.title, s.score AS sentiment, s.label,
+        SELECT p.created_at, p.source, p.community, coalesce(p.title, p.body) AS title,
+               s.score AS sentiment, s.label,
                p.engagement, pt.match_type, p.url
         FROM post_tickers pt
         JOIN posts p ON p.id = pt.post_id
@@ -189,13 +190,13 @@ def community_breakdown(con: duckdb.DuckDBPyConnection, ticker: str, week: Week,
     """Posts and mean sentiment per community for one ticker and week."""
     return con.execute(
         """
-        SELECT p.community, count(*) AS posts, avg(s.score) AS sentiment
+        SELECT p.source, p.community, count(*) AS posts, avg(s.score) AS sentiment
         FROM post_tickers pt
         JOIN posts p ON p.id = pt.post_id
         LEFT JOIN post_scores s
                ON s.post_id = pt.post_id AND s.ticker = pt.ticker AND s.model = ?
         WHERE pt.ticker = ? AND p.created_at >= ? AND p.created_at < ?
-        GROUP BY 1 ORDER BY posts DESC
+        GROUP BY 1, 2 ORDER BY posts DESC
         """,
         [model, ticker, week.start, week.end],
     ).df()

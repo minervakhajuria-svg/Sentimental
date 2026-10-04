@@ -66,7 +66,7 @@ sentiment-analyser/
 | content_hash | TEXT | for de-duplication |
 
 **post_tickers**: one row per (post, ticker) match
-`post_id, ticker, match_type (cashtag|alias|bare), confidence`
+`post_id, ticker, match_type (cashtag|alias|bare|source), confidence`
 
 **post_scores**: one row per (post, ticker, model)
 `post_id, ticker, model, label (pos|neg|neu), score (-1..1), scored_at`
@@ -205,3 +205,10 @@ The assumption "chatter leads price" is **unproven**; test it.
   - `early_chatter_flag`: top decile **by rank** of `composite_bull` or `composite_bear` (a quantile threshold breaks on ties), `|ret_5d|` < 3%, `rel_volume` > 1.2. Without price data the flag is false.
   - Divergence warning (UI only): bullish sentiment, `rel_volume` > 1.2 and `ret_5d` below -2%. Shown as a card on the rankings page and a badge on the drill-down.
   - Context is attached after the composite is computed and never feeds it.
+- **Phase 6 (more sources, noise and bot filtering): done 2026-10-04.**
+  - **News (Finnhub):** free personal-use key (`FINNHUB_API_KEY`, 60 calls/min). One request per ticker per run, for the most-mentioned tickers in the last 7 days topped up with the most liquid universe names (max 50), so news collects even before Reddit approval. Each outlet counts as one author; news has no engagement, so it gets an engagement floor (config).
+  - **StockTwits:** new developer registrations were closed on 2026-10-04 and its terms prohibit scraping, so the collector uses the official API with `STOCKTWITS_ACCESS_TOKEN` and is **disabled** in config until access exists. Author Bullish/Bearish tags are stored as `post_scores` model `stocktwits_tag`; `python -m analysis.scorer_check` measures FinBERT's agreement with them. `author_karma` holds follower count for StockTwits.
+  - **Source tickers:** collectors can name the tickers an item is about (`Post.source_tickers`); these become `post_tickers` rows with `match_type = 'source'` (confidence 0.9). They survive extractor rebuilds and win over extractor matches for the same ticker; the extractor still runs on those posts to find other tickers.
+  - **Daily job:** each source starts independently, so missing credentials for one only fail that source (exit 2), not the run.
+  - **Noise filtering** (`signals/filters.py`, config `signals.noise`): exact reposts, near-duplicates (64-bit SimHash over word shingles with banding; posts under 12 words only exact-matched), spam regexes, per-source author down-weighting for new or low-karma accounts (missing data isn't penalised; weight 0 drops), hyperactive-author down-weighting (> 40 posts/week), and the per-author cap. Reddit bots (AutoModerator, VisualMod) are dropped at collection.
+  - **Tests** block all non-local network connections (autouse fixture in `tests/conftest.py`).

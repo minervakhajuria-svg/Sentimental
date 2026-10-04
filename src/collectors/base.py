@@ -30,6 +30,13 @@ class Post:
     url: str | None
     engagement: int | None
     content_hash: str | None
+    # Not stored in `posts`. Sources that already know which ticker an item is
+    # about (a news API's "related" field, a StockTwits symbol stream) say so
+    # here; these become match_type "source" rows in post_tickers.
+    source_tickers: tuple[str, ...] = ()
+    # The author's own bullish/bearish tag (+1 / -1), if the source has one.
+    # Stored in post_scores under its own model name to validate the scorer.
+    source_sentiment: int | None = None
 
     def as_row(self) -> dict:
         return asdict(self)

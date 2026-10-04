@@ -16,7 +16,7 @@ import duckdb
 import numpy as np
 import pandas as pd
 
-from signals.filters import add_post_weight, cap_per_author, drop_reposts
+from signals.filters import apply_noise_filters, cap_per_author
 
 
 @dataclass(frozen=True)
@@ -54,7 +54,8 @@ def load_mentions(con: duckdb.DuckDBPyConnection, start: datetime, end: datetime
     return con.execute(
         """
         SELECT p.id AS post_id, pt.ticker, p.source, p.community, p.author_id,
-               p.created_at, p.engagement, p.content_hash, pt.confidence, s.score
+               p.author_age_days, p.author_karma, p.created_at, p.engagement,
+               p.content_hash, p.title, p.body, pt.confidence, s.score
         FROM posts p
         JOIN post_tickers pt ON pt.post_id = p.id
         LEFT JOIN post_scores s
@@ -89,8 +90,7 @@ def compute_components(con: duckdb.DuckDBPyConnection, week: Week, cfg: dict) ->
     age = week.end - pd.to_datetime(df["created_at"])
     df["day"] = (age // pd.Timedelta(days=1)).astype(int)  # 0..6 = this week
     df["block"] = df["day"] // 7  # 7-day blocks counting back: 0 = this week, 1 = last week
-    df = drop_reposts(df)
-    df = add_post_weight(df, cfg["source_weights"])
+    df = apply_noise_filters(df, cfg)
     df = cap_per_author(df, cfg["author_cap_per_ticker_week"], period_col="block")
 
     tickers = sorted(df.loc[df["block"] == 0, "ticker"].unique())

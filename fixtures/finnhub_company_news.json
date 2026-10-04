@@ -1,0 +1,68 @@
+{
+  "NVDA": [
+    {
+      "category": "company",
+      "datetime": 1791032400,
+      "headline": "Chipmaker lifts outlook on data-center demand",
+      "id": 9001,
+      "image": "",
+      "related": "NVDA",
+      "source": "Newswire",
+      "summary": "The company raised full-year guidance.",
+      "url": "https://example.com/news/9001"
+    },
+    {
+      "category": "company",
+      "datetime": 1791018000,
+      "headline": "Chip stocks rally as rate fears ease",
+      "id": 9002,
+      "image": "",
+      "related": "NVDA,AMD",
+      "source": "Market Brief",
+      "summary": "",
+      "url": "https://example.com/news/9002"
+    },
+    {
+      "category": "company",
+      "datetime": 1789894800,
+      "headline": "Old article outside the window",
+      "id": 9003,
+      "image": "",
+      "related": "NVDA",
+      "source": "Newswire",
+      "summary": "x",
+      "url": "https://example.com/news/9003"
+    },
+    {
+      "category": "company",
+      "datetime": 1791021600,
+      "headline": "",
+      "id": 9004,
+      "related": "NVDA",
+      "source": "Newswire",
+      "summary": "empty headline is skipped",
+      "url": "https://example.com/news/9004"
+    }
+  ],
+  "AMD": [
+    {
+      "category": "company",
+      "datetime": 1791018000,
+      "headline": "Chip stocks rally as rate fears ease",
+      "id": 9002,
+      "image": "",
+      "related": "NVDA,AMD",
+      "source": "Market Brief",
+      "summary": "",
+      "url": "https://example.com/news/9002"
+    },
+    {
+      "category": "company",
+      "datetime": "not-a-timestamp",
+      "headline": "Malformed item",
+      "id": 9005,
+      "related": "AMD",
+      "source": "Newswire"
+    }
+  ]
+}

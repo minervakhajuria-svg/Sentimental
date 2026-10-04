@@ -130,6 +130,15 @@ def arrow(score: float | None, band: float = 0.0) -> str:
     return "▲" if score > band else "▼" if score < -band else "■"
 
 
+def source_label(source: str, community: str | None) -> str:
+    """How a post's origin is shown: r/stocks, the news outlet, or StockTwits."""
+    if source == "reddit":
+        return f"r/{community}"
+    if source == "stocktwits":
+        return "StockTwits"
+    return str(community or source)
+
+
 def logo() -> str:
     return '<div class="sm-logo">Sentimental<span>.</span></div>'
 
@@ -219,7 +228,7 @@ def community_bars(df: pd.DataFrame) -> str:
         width = 0 if pd.isna(s) else (s + 1) * 50
         val = "–" if pd.isna(s) else f"{(s + 1) * 50:.0f}"
         rows.append(
-            f'<div class="sm-bar"><div class="name">r/{escape(str(r.community))}</div>'
+            f'<div class="sm-bar"><div class="name">{escape(source_label(r.source, r.community))}</div>'
             f'<div class="track"><div class="fill" style="width:{width:.0f}%;background:{tone_color(s)}"></div></div>'
             f'<div class="val">{val}</div></div>'
         )
@@ -235,7 +244,7 @@ def post_list(df: pd.DataFrame) -> str:
         when = pd.Timestamp(r.created_at).strftime("%d %b %H:%M")
         link = escape(r.url or "#", quote=True)
         rows.append(
-            f'<div class="sm-post"><div class="src">R/{escape(str(r.community)).upper()}<br>{when}</div>'
+            f'<div class="sm-post"><div class="src">{escape(source_label(r.source, r.community)).upper()}<br>{when}</div>'
             f'<div class="txt"><a href="{link}" target="_blank" rel="noopener noreferrer">{escape(r.title or "(no title)")}</a>'
             f'<div class="meta">{int(r.engagement or 0)} engagement · matched by {escape(str(r.match_type))}</div></div>'
             f'<div class="tone" style="color:{color}">{tone}</div></div>'

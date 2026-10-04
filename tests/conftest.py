@@ -8,6 +8,7 @@ so tests never hit the network.
 from __future__ import annotations
 
 import json
+import socket
 from datetime import datetime
 from pathlib import Path
 from types import SimpleNamespace
@@ -67,3 +68,20 @@ def reddit_fixture() -> dict:
 def fixed_now(reddit_fixture):
     now = datetime.fromisoformat(reddit_fixture["collected_at"])
     return lambda: now
+
+
+@pytest.fixture(autouse=True)
+def no_network(monkeypatch):
+    """Fail any test that tries to reach the internet (CLAUDE.md: never hit live APIs).
+
+    Local connections stay allowed, since some tools talk to themselves over loopback.
+    """
+    real_connect = socket.socket.connect
+
+    def guarded(sock, address, *args, **kwargs):
+        host = address[0] if isinstance(address, tuple) else address
+        if host not in ("127.0.0.1", "::1", "localhost"):
+            raise RuntimeError(f"test tried to open a network connection to {host!r}")
+        return real_connect(sock, address, *args, **kwargs)
+
+    monkeypatch.setattr(socket.socket, "connect", guarded)

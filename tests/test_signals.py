@@ -79,7 +79,8 @@ def test_drop_reposts_keeps_earliest():
 
 
 def test_post_weight_is_log_engagement():
-    df = add_post_weight(_frame([{"engagement": 0}, {"engagement": np.e - 1}]), {"reddit": 2.0})
+    df = add_post_weight(_frame([{"engagement": 0}, {"engagement": np.e - 1}]),
+                         {"source_weights": {"reddit": 2.0}})
     assert df["weight"].tolist() == pytest.approx([0.0, 2.0])
 
 
