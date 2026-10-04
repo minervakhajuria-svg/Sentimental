@@ -300,3 +300,11 @@ def context_kv(summary: dict) -> str:
              ("REL. VOLUME", fmt_x(summary.get("rel_volume"))),
              ("UP/DOWN VOLUME", fmt_x(summary.get("updown_vol_ratio")))]
     return '<div class="sm-kv">' + "".join(f"<span>{k}<b>{v}</b></span>" for k, v in items) + "</div>"
+
+
+def fmt_signed(v) -> str:
+    return "–" if v is None or pd.isna(v) else f"{v:+.3f}"
+
+
+def fmt_rate(v) -> str:
+    return "–" if v is None or pd.isna(v) else f"{v:.0%}"

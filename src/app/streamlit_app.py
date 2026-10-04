@@ -20,16 +20,20 @@ rankings_page = st.Page(views.rankings, title="Weekly rankings", icon=":material
                         default=True)
 views.drilldown_page = st.Page(views.drilldown, title="Ticker drill-down",
                                icon=":material/query_stats:", url_path="ticker")
+validation_page = st.Page(views.validation, title="Validation", icon=":material/science:",
+                          url_path="validation")
+pages = {"nav-rankings": rankings_page, "nav-ticker": views.drilldown_page,
+         "nav-validation": validation_page}
 # Navigation is drawn by hand so the logo sits above the links.
-nav = st.navigation([rankings_page, views.drilldown_page], position="hidden")
+nav = st.navigation(list(pages.values()), position="hidden")
 with st.sidebar:
     st.markdown(theme.logo(), unsafe_allow_html=True)
-    for key, page in (("nav-rankings", rankings_page), ("nav-ticker", views.drilldown_page)):
+    for key, page in pages.items():
         with st.container(key=key):
             st.page_link(page)
     st.divider()
 # Green tint on the current page's link (Streamlit has no stable "active" hook).
-current = "nav-ticker" if nav.url_path == views.drilldown_page.url_path else "nav-rankings"
+current = next(k for k, p in pages.items() if p.url_path == nav.url_path)
 st.markdown(theme.active_nav_css(current), unsafe_allow_html=True)
 
 nav.run()

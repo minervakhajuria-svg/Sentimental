@@ -12,8 +12,11 @@ from contextlib import contextmanager
 from datetime import datetime, timedelta
 from pathlib import Path
 
+from html import escape
+
 import altair as alt
 import duckdb
+import pandas as pd
 import streamlit as st
 
 from app import queries, theme
@@ -289,3 +292,123 @@ def drilldown() -> None:
                 html('<div class="sm-muted">No posts about this ticker that week.</div>')
             else:
                 html(theme.post_list(posts))
+
+
+def _ic_heatmap(table):
+    from analysis.leadlag import NAMES
+    t = table.assign(signal=table["signal"].map(lambda x: NAMES.get(x, x)))
+    t["label"] = t["mean_ic"].map(lambda v: "–" if pd.isna(v) else f"{v:+.2f}")
+    base = alt.Chart(t).encode(
+        x=alt.X("horizon:N", title=None, sort=["Prior week", "Same week", "Next week"],
+                axis=alt.Axis(orient="top", labelAngle=0)),
+        y=alt.Y("signal:N", title=None),
+    )
+    rect = base.mark_rect(cornerRadius=4).encode(
+        color=alt.Color("mean_ic:Q", legend=None,
+                        scale=alt.Scale(domain=[-0.3, 0, 0.3], range=[theme.RED, theme.CARD, theme.GREEN],
+                                        clamp=True, interpolate="rgb")),
+        tooltip=["signal", "horizon", alt.Tooltip("mean_ic:Q", format="+.3f", title="mean IC"),
+                 alt.Tooltip("t_stat:Q", format=".2f", title="t-stat"), "weeks:Q"],
+    )
+    text = base.mark_text(font="JetBrains Mono", fontSize=13, color=theme.TEXT).encode(text="label:N")
+    return theme.chart_config(alt.layer(rect, text).properties(height=230))
+
+
+def _ic_bars(series):
+    df = series.rename("ic").rename_axis("week").reset_index()
+    df["week"] = pd.to_datetime(df["week"])
+    df["label"] = df["week"].dt.strftime("%d %b")
+    # One band per week (ordinal), so bars have real width instead of hairlines.
+    chart = alt.Chart(df).mark_bar(cornerRadiusTopLeft=3, cornerRadiusTopRight=3).encode(
+        x=alt.X("label:N", title=None, sort=list(df["label"]), axis=alt.Axis(labelAngle=0)),
+        y=alt.Y("ic:Q", title="WEEKLY IC"),
+        color=alt.condition("datum.ic >= 0", alt.value(theme.GREEN), alt.value(theme.RED)),
+        tooltip=[alt.Tooltip("week:T", format="%d %b %Y"), alt.Tooltip("ic:Q", format="+.3f")],
+    ).properties(height=220)
+    return theme.chart_config(chart)
+
+
+def _cumulative_spread(series):
+    df = series.rename("spread").rename_axis("week").reset_index()
+    df["week"] = pd.to_datetime(df["week"])
+    df["cumulative"] = (1 + df["spread"]).cumprod() - 1
+    chart = alt.Chart(df).mark_line(color=theme.GREEN, strokeWidth=2.5, point=True).encode(
+        x=alt.X("week:T", title=None, axis=alt.Axis(format="%d %b")),
+        y=alt.Y("cumulative:Q", title="CUMULATIVE TOP − BOTTOM", axis=alt.Axis(format="%")),
+        tooltip=[alt.Tooltip("week:T", format="%d %b %Y"), alt.Tooltip("spread:Q", format="+.2%"),
+                 alt.Tooltip("cumulative:Q", format="+.2%")],
+    ).properties(height=220)
+    return theme.chart_config(chart)
+
+
+def validation() -> None:
+    from jobs.run_analysis import analyse  # imported here: only this page needs it
+
+    with db() as con:
+        r = analyse(con, cfg)
+
+    html(theme.label("Validation · lead-lag and backtest"))
+    html(theme.title("Does chatter lead price?"))
+    html('<p class="sm-sub">Each week, signals are compared with returns in the week before, the same week, '
+         'and the week after. If chatter leads price, the next-week column should be strongest.</p>')
+
+    if not r["weeks"]:
+        st.info("No ranked weeks yet. Results appear after a few weekly rankings.")
+        return
+
+    bt = r["backtest"]
+    have, need = bt["weeks_with_returns"], r["min_weeks"]
+    with st.container(key="card-glow-data" if r["enough_data"] else "card-data"):
+        html(theme.label("Data so far"))
+        pct = min(1.0, have / need)
+        color = theme.GREEN if r["enough_data"] else theme.MUTED
+        html(f'<div class="sm-stat"><div class="v">{have}<span class="sm-muted"> / {need} weeks</span></div></div>'
+             f'<div class="sm-bar" style="margin-top:12px"><div class="track"><div class="fill" '
+             f'style="width:{pct:.0%};background:{color}"></div></div></div>')
+        if not r["enough_data"]:
+            html(f'<div class="sm-muted" style="margin-top:12px">Fewer than {need} weeks with next-week '
+                 'returns: everything below is noise until more data accumulates.</div>')
+
+    with st.container(key="card-verdicts"):
+        html(theme.label("Reading"))
+        html("".join(f'<div class="sm-warn"><div class="why" style="color:{theme.TEXT}">{escape(v)}</div></div>'
+                     for v in r["verdicts"].values()))
+
+    with st.container(key="card-leadlag"):
+        html(theme.label("Mean weekly rank correlation (IC) of signal vs return"))
+        st.altair_chart(_ic_heatmap(r["lead_lag"]), width="stretch")
+        html('<div class="sm-muted">Green: higher signal, higher return. Red: the reverse. '
+             'Hover for t-stats; |t| above 2 is the usual bar for "probably not luck".</div>')
+
+    c1, c2 = st.columns(2)
+    with c1, st.container(key="card-icseries"):
+        ic = bt["ic_bull"]
+        html(theme.label(f"Bull composite IC by week · mean {theme.fmt_signed(ic['mean_ic'])}"))
+        if len(bt["ic_bull_series"]):
+            st.altair_chart(_ic_bars(bt["ic_bull_series"]), width="stretch")
+        else:
+            html('<div class="sm-muted">Not enough tickers per week yet.</div>')
+    with c2, st.container(key="card-spread"):
+        html(theme.label("Top minus bottom quintile, next week"))
+        if len(bt["quintile_spread_series"]):
+            st.altair_chart(_cumulative_spread(bt["quintile_spread_series"]), width="stretch")
+        else:
+            html('<div class="sm-muted">Needs at least 5 ranked tickers per week.</div>')
+
+    hr = bt["hit_rates"]
+    h1, h2, h3 = st.columns(3)
+    with h1, st.container(key="card-hit-bull"):
+        html(theme.stat("Bull list hit rate", theme.fmt_rate(hr["bull_list"]["hit_rate"]),
+                        f"mentions-only: {theme.fmt_rate(hr['bull_baseline_mentions']['hit_rate'])}", tone="green"))
+    with h2, st.container(key="card-hit-bear"):
+        html(theme.stat("Bear list hit rate", theme.fmt_rate(hr["bear_list"]["hit_rate"]),
+                        f"mentions-only: {theme.fmt_rate(hr['bear_baseline_mentions']['hit_rate'])}", tone="red"))
+    with h3, st.container(key="card-relvol"):
+        rv = bt["rel_volume_experiment"]
+        outcome = {True: "Helps", False: "No help", None: "n/a"}[rv["improves"]]
+        html(theme.stat("Add rel_volume to composite?", outcome,
+                        f"IC {theme.fmt_signed(rv['base']['mean_ic'])} → "
+                        f"{theme.fmt_signed(rv['with_rel_volume']['mean_ic'])}"))
+    html('<div class="sm-muted">Hit rate = share of picks that beat (bull) or trailed (bear) that week\'s '
+         'median next-week return; 50% is a coin flip. Run <code>python -m jobs.run_analysis '
+         '--refresh-prices</code> first to re-download clean price history.</div>')

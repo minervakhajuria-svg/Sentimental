@@ -153,3 +153,18 @@ def test_source_labels():
     assert theme.source_label("reddit", "stocks") == "r/stocks"
     assert theme.source_label("news", "Newswire") == "Newswire"
     assert theme.source_label("stocktwits", "stocktwits") == "StockTwits"
+
+
+def _validation_script():
+    from app import views
+    views.validation()
+
+
+def test_validation_page_renders(demo, monkeypatch):
+    monkeypatch.setenv("SENTIMENT_DB_PATH", str(demo[0]))
+    at = AppTest.from_function(_validation_script, default_timeout=60).run()
+    assert not at.exception
+    md = _markdown(at)
+    assert "Does chatter lead price?" in md
+    assert "/ 12 weeks" in md and "noise" in md  # demo has 8 weeks: flagged as too little data
+    assert "Bull list hit rate" in md

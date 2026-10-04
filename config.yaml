@@ -152,3 +152,8 @@ context:
   divergence_warning:        # rising volume + falling price + bullish chatter
     min_rel_volume: 1.2
     min_price_drop: 0.02     # 5-day fall bigger than this counts as "falling"
+
+analysis:
+  min_weeks: 12              # below this, results are flagged as noise
+  min_tickers_per_week: 5    # skip weeks with fewer ranked tickers
+  rel_volume_weight: 0.15    # weight tried for z(rel_volume) in the experiment
