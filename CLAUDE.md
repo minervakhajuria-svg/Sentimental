@@ -192,3 +192,9 @@ The assumption "chatter leads price" is **unproven**; test it.
   - Attention baseline = 30 days before the week, zero-filled daily weighted mentions, std floored and z clipped (config). Missing last-week sentiment gives NULL momentum, which contributes 0 to the composite.
   - `weekly_signals` stores every eligible ticker; the two lists are queries over it (`signals.composite.ranked_lists`). Context columns stay NULL until phase 5.
   - Run: `python -m jobs.rank_weekly [--week-ending YYYY-MM-DD] [--no-score]`. The first run downloads FinBERT (~440 MB) from Hugging Face.
+- **Phase 4 (Streamlit output): done 2026-10-04.**
+  - Run: `streamlit run src/app/streamlit_app.py`. `streamlit_app.py` holds only navigation and the footer; pages live in `app/views.py`, read-only queries in `app/queries.py`.
+  - Page 1: week selector, both ranked lists with context columns (blank until phase 5) and `early_chatter_flag`. Clicking a row opens the drill-down. Page 2: daily mentions and mean sentiment (and price once collected), weekly signal history, and the week's top posts by engagement (reposts collapsed) with links.
+  - The app opens a short-lived read-only DuckDB connection per render, so it never blocks the collection/ranking jobs; if a job holds the write lock it shows a "busy" message.
+  - The disclaimer shows in the sidebar and at the bottom of every page.
+  - Demo data: `python tests/demo_data.py` writes `data/demo.duckdb` (invented posts); point the app at it with `SENTIMENT_DB_PATH=data/demo.duckdb`. `.claude/launch.json` has a `streamlit-demo` config for this.

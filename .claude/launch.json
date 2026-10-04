@@ -1,0 +1,12 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "streamlit-demo",
+      "runtimeExecutable": ".venv/Scripts/python.exe",
+      "runtimeArgs": ["-m", "streamlit", "run", "src/app/streamlit_app.py", "--server.headless", "true", "--server.port", "8501"],
+      "env": {"SENTIMENT_DB_PATH": "data/demo.duckdb"},
+      "port": 8501
+    }
+  ]
+}

@@ -12,6 +12,7 @@ dependencies = [
     "pandas>=2.0",
     "torch>=2.4",
     "transformers>=4.40",
+    "streamlit>=1.40",
 ]
 
 [project.optional-dependencies]
