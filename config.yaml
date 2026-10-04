@@ -1,0 +1,29 @@
+# Non-secret configuration. Secrets live in .env (see .env.example).
+
+storage:
+  db_path: data/sentiment.duckdb
+
+logging:
+  log_dir: logs
+  level: INFO
+
+collect:
+  # Each daily run looks back this far. Overlapping with the previous run is
+  # deliberate: upserts make it harmless, and it covers a missed or late run.
+  lookback_hours: 36
+
+reddit:
+  communities:
+    - wallstreetbets
+    - stocks
+    - investing
+    - options
+    - StockMarket
+    - SecurityAnalysis
+  # Reddit listings cap at ~1000 items; "new" is walked until posts are older than `since`.
+  max_posts_per_community: 1000
+  # Author age/karma cost one extra API call per distinct author, so it can be switched off.
+  fetch_author_details: true
+  # Retry/backoff for transient API errors (per community).
+  max_retries: 3
+  backoff_seconds: 5

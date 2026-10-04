@@ -1,0 +1,89 @@
+{
+  "collected_at": "2026-10-03T18:00:00",
+  "authors": {
+    "ape_trader_01": {
+      "created_utc": 1611705600.0,
+      "link_karma": 1200,
+      "comment_karma": 8800
+    },
+    "value_hunter": {
+      "created_utc": 1433116800.0,
+      "link_karma": 500,
+      "comment_karma": 15000
+    },
+    "fresh_acct_9": {
+      "created_utc": 1790812800.0,
+      "link_karma": 1,
+      "comment_karma": 0
+    },
+    "suspended_guy": {
+      "suspended": true
+    }
+  },
+  "subreddits": {
+    "wallstreetbets": [
+      {
+        "id": "1aaa01",
+        "title": "$NVDA calls printing, earnings next week",
+        "selftext": "Loaded up on $NVDA 150c. Datacenter demand is insane.",
+        "author": "ape_trader_01",
+        "created_utc": 1791039600.0,
+        "score": 420,
+        "num_comments": 88,
+        "permalink": "/r/wallstreetbets/comments/1aaa01/nvda_calls/"
+      },
+      {
+        "id": "1aaa02",
+        "title": "TSLA puts are free money",
+        "selftext": "",
+        "author": "fresh_acct_9",
+        "created_utc": 1791019800.0,
+        "score": 12,
+        "num_comments": 40,
+        "permalink": "/r/wallstreetbets/comments/1aaa02/tsla_puts/"
+      },
+      {
+        "id": "1aaa03",
+        "title": "Loss porn: down 90% on AMD",
+        "selftext": "[removed]",
+        "author": null,
+        "created_utc": 1790971200.0,
+        "score": 3,
+        "num_comments": 5,
+        "permalink": "/r/wallstreetbets/comments/1aaa03/loss_porn/"
+      },
+      {
+        "id": "1aaa04",
+        "title": "Old post from last week",
+        "selftext": "Should be excluded by the since cutoff.",
+        "author": "ape_trader_01",
+        "created_utc": 1790596800.0,
+        "score": 50,
+        "num_comments": 10,
+        "permalink": "/r/wallstreetbets/comments/1aaa04/old/"
+      }
+    ],
+    "stocks": [
+      {
+        "id": "1bbb01",
+        "title": "Is Microsoft undervalued after the selloff?",
+        "selftext": "Looking at MSFT free cash flow vs peers...",
+        "author": "value_hunter",
+        "created_utc": 1791032400.0,
+        "score": 95,
+        "num_comments": 61,
+        "permalink": "/r/stocks/comments/1bbb01/msft/"
+      },
+      {
+        "id": "1bbb02",
+        "title": "$NVDA Calls Printing, earnings next week",
+        "selftext": "Loaded up on $NVDA 150c.  Datacenter demand is INSANE.",
+        "author": "suspended_guy",
+        "created_utc": 1791025200.0,
+        "score": 0,
+        "num_comments": 1,
+        "permalink": "/r/stocks/comments/1bbb02/nvda_repost/"
+      }
+    ]
+  }
+}
