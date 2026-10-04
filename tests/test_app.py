@@ -70,13 +70,19 @@ def _drilldown_script():
     views.drilldown()
 
 
+def _markdown(at) -> str:
+    return "\n".join(m.value for m in at.markdown)
+
+
 def test_rankings_page_renders(demo, monkeypatch):
     monkeypatch.setenv("SENTIMENT_DB_PATH", str(demo[0]))
     at = AppTest.from_file(str(APP), default_timeout=60).run()
     assert not at.exception
-    assert [s.value for s in at.subheader] == ["Heating up, bullish", "Heating up, bearish"]
+    md = _markdown(at)
+    assert "Sentimental<span>.</span>" in md
+    assert "Heating up · bullish" in md and "Heating up · bearish" in md
     assert at.dataframe[0].value.iloc[0]["ticker"] == "NVDA"
-    assert any("not investment advice" in c.value for c in at.caption)
+    assert "not investment advice" in md
 
 
 def test_drilldown_page_renders(demo, monkeypatch):
@@ -85,10 +91,11 @@ def test_drilldown_page_renders(demo, monkeypatch):
     at.session_state["ticker"] = "INTC"
     at.run()
     assert not at.exception
-    assert at.header[0].value.startswith("INTC")
-    titles = [s.value for s in at.subheader]
-    assert "Mentions and sentiment" in titles
-    assert any(t.startswith("Top posts") for t in titles)
+    md = _markdown(at)
+    assert "Intel Corporation" in md and ">INTC<" in md
+    for section in ("Weekly score", "Mention mix", "By community", "Top posts"):
+        assert section in md
+    assert "Bearish" in md  # INTC's storyline
 
 
 def test_missing_database_shows_message(tmp_path, monkeypatch):
@@ -96,3 +103,35 @@ def test_missing_database_shows_message(tmp_path, monkeypatch):
     at = AppTest.from_file(str(APP), default_timeout=60).run()
     assert not at.exception
     assert "No database yet" in at.info[0].value
+
+
+def test_week_summary_and_breakdown(con, demo):
+    week = demo[1][-1]
+    summary = queries.week_summary(con, "INTC", week, "finbert")
+    assert summary["posts"] == summary["pos"] + summary["neu"] + summary["neg"]
+    assert summary["ranked_sentiment"] < 0
+    breakdown = queries.community_breakdown(con, "INTC", week, "finbert")
+    assert breakdown["posts"].sum() == summary["posts"]
+    tape = queries.week_tape(con, week.week_start)
+    assert tape["mentions"].is_monotonic_decreasing
+
+
+def test_post_text_is_escaped():
+    import pandas as pd
+    from app import theme
+    df = pd.DataFrame([{"created_at": pd.Timestamp("2026-10-01"), "community": "<b>x</b>",
+                        "title": "<script>alert(1)</script>", "sentiment": 0.5, "label": "pos",
+                        "engagement": 3, "match_type": "cashtag",
+                        "url": 'https://example.com/"onmouseover="x'}])
+    out = theme.post_list(df)
+    assert "<script>" not in out and "&lt;script&gt;" in out
+    assert '"onmouseover' not in out
+    assert "<b>x</b>" not in out
+
+
+def test_gauge_maps_sentiment_to_0_100():
+    from app import theme
+    assert ">75<" in theme.gauge(0.5, None, True)
+    assert ">0<" in theme.gauge(-1.0, None, True)
+    assert "Bearish" in theme.gauge(-0.5, -0.2, True)
+    assert "–" in theme.gauge(None, None, False)

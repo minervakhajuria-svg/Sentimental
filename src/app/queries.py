@@ -136,3 +136,62 @@ def top_posts(con: duckdb.DuckDBPyConnection, ticker: str, week: Week,
         """,
         [model, ticker, week.start, week.end, limit],
     ).df()
+
+
+def week_tape(con: duckdb.DuckDBPyConnection, week_start: date) -> pd.DataFrame:
+    """Every eligible ticker that week with its sentiment, busiest first (for the ticker tape)."""
+    return con.execute(
+        """
+        SELECT ticker, sentiment, momentum, mentions FROM weekly_signals
+        WHERE week_start = ? ORDER BY mentions DESC
+        """,
+        [week_start],
+    ).df()
+
+
+def week_summary(con: duckdb.DuckDBPyConnection, ticker: str, week: Week, model: str) -> dict:
+    """Plain (unweighted) post counts and label mix for one ticker and week.
+
+    The ranked sentiment in weekly_signals is engagement-weighted and filtered;
+    this is the simple tally, used for the mention-mix bar and as the gauge
+    fallback when the ticker wasn't eligible that week.
+    """
+    row = con.execute(
+        """
+        SELECT count(*) AS posts,
+               avg(s.score) AS mean_score,
+               count(*) FILTER (WHERE s.label = 'pos') AS pos,
+               count(*) FILTER (WHERE s.label = 'neu') AS neu,
+               count(*) FILTER (WHERE s.label = 'neg') AS neg
+        FROM post_tickers pt
+        JOIN posts p ON p.id = pt.post_id
+        LEFT JOIN post_scores s
+               ON s.post_id = pt.post_id AND s.ticker = pt.ticker AND s.model = ?
+        WHERE pt.ticker = ? AND p.created_at >= ? AND p.created_at < ?
+        """,
+        [model, ticker, week.start, week.end],
+    ).fetchone()
+    summary = dict(zip(["posts", "mean_score", "pos", "neu", "neg"], row))
+    signal = con.execute(
+        "SELECT sentiment, momentum FROM weekly_signals WHERE week_start = ? AND ticker = ?",
+        [week.week_start, ticker],
+    ).fetchone()
+    summary["ranked_sentiment"], summary["momentum"] = signal if signal else (None, None)
+    return summary
+
+
+def community_breakdown(con: duckdb.DuckDBPyConnection, ticker: str, week: Week,
+                        model: str) -> pd.DataFrame:
+    """Posts and mean sentiment per community for one ticker and week."""
+    return con.execute(
+        """
+        SELECT p.community, count(*) AS posts, avg(s.score) AS sentiment
+        FROM post_tickers pt
+        JOIN posts p ON p.id = pt.post_id
+        LEFT JOIN post_scores s
+               ON s.post_id = pt.post_id AND s.ticker = pt.ticker AND s.model = ?
+        WHERE pt.ticker = ? AND p.created_at >= ? AND p.created_at < ?
+        GROUP BY 1 ORDER BY posts DESC
+        """,
+        [model, ticker, week.start, week.end],
+    ).df()

@@ -1,0 +1,37 @@
+# Sentimental: fluorescent green on black.
+[theme]
+base = "dark"
+primaryColor = "#39FF14"
+backgroundColor = "#0A0A0A"
+secondaryBackgroundColor = "#111314"
+textColor = "#E6E6E6"
+linkColor = "#39FF14"
+linkUnderline = false
+borderColor = "#1F2421"
+showWidgetBorder = true
+dataframeBorderColor = "#1A1E1C"
+dataframeHeaderBackgroundColor = "#0F1211"
+dataframeHeaderTextColor = "#8A8F98"
+greenColor = "#39FF14"
+greenTextColor = "#39FF14"
+redColor = "#FF4D4D"
+redTextColor = "#FF4D4D"
+grayColor = "#8A8F98"
+grayTextColor = "#8A8F98"
+codeBackgroundColor = "#111314"
+codeTextColor = "#39FF14"
+font = "Space Grotesk:https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&display=swap"
+headingFont = "Space Grotesk:https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&display=swap"
+codeFont = "JetBrains Mono:https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&display=swap"
+headingFontWeights = 700
+baseRadius = "10px"
+buttonRadius = "10px"
+chartCategoricalColors = ["#39FF14", "#FF4D4D", "#8A8F98", "#4A524E"]
+
+[theme.sidebar]
+backgroundColor = "#0A0C0B"
+secondaryBackgroundColor = "#111314"
+borderColor = "#1F2421"
+
+[client]
+toolbarMode = "minimal"

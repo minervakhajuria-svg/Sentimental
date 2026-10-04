@@ -1,4 +1,4 @@
-"""Page functions for the Streamlit app (navigation lives in streamlit_app.py).
+"""Page functions for Sentimental (navigation lives in streamlit_app.py).
 
 The app only reads the database. It opens a short-lived read-only connection
 per page render rather than holding one open, so the daily and weekly jobs
@@ -16,24 +16,24 @@ import altair as alt
 import duckdb
 import streamlit as st
 
-from app import queries
+from app import queries, theme
 from settings import load_config
 
+APP_NAME = "Sentimental"
 DISCLAIMER = "Screening aid only, not investment advice."
 
 cfg = load_config(os.environ.get("SENTIMENT_CONFIG"))
-
-
-def db_path() -> str:
-    # Read per render (not at import) so the env override always applies.
-    return os.environ.get("SENTIMENT_DB_PATH") or cfg["storage"]["db_path"]
-
 MODEL = cfg["signals"]["sentiment_model"]
 TOP_N = cfg["signals"]["top_n"]
 
 # Set by streamlit_app.py once the page objects exist, so a click in the
 # rankings table can jump to the drill-down.
 drilldown_page = None
+
+
+def db_path() -> str:
+    # Read per render (not at import) so the env override always applies.
+    return os.environ.get("SENTIMENT_DB_PATH") or cfg["storage"]["db_path"]
 
 
 @contextmanager
@@ -54,6 +54,10 @@ def db():
         con.close()
 
 
+def html(markup: str) -> None:
+    st.markdown(markup, unsafe_allow_html=True)
+
+
 def week_label(d) -> str:
     return f"Week of {d:%d %b %Y}"
 
@@ -67,7 +71,7 @@ def pick_week(weeks):
 
 RANK_COLUMNS = {
     "rank": st.column_config.NumberColumn("#", width="small"),
-    "ticker": st.column_config.TextColumn("Ticker"),
+    "ticker": st.column_config.TextColumn("Ticker", width="small"),
     "company_name": st.column_config.TextColumn("Company"),
     "composite": st.column_config.NumberColumn("Composite", format="%.2f",
         help="Weighted cross-sectional z-score of attention, sentiment, momentum and breadth"),
@@ -87,60 +91,89 @@ RANK_COLUMNS = {
 }
 
 
-def ranked_table(title: str, df, key: str) -> None:
-    st.subheader(title)
-    if df.empty:
-        st.caption("No tickers qualified this week.")
-        return
-    # Tall enough to show every row without an inner scrollbar.
-    event = st.dataframe(df, column_config=RANK_COLUMNS, hide_index=True,
-                         height=35 * (len(df) + 1) + 3,
-                         on_select="rerun", selection_mode="single-row",
-                         width="stretch", key=key)
-    rows = event.selection.rows
-    if rows:
-        st.session_state["ticker"] = df.iloc[rows[0]]["ticker"]
-        if drilldown_page is not None:
-            st.switch_page(drilldown_page)
+def ranked_table(title: str, dot: str, df, key: str) -> None:
+    with st.container(key=f"card-{key}"):
+        html(theme.label(title, dot=dot))
+        if df.empty:
+            html('<div class="sm-muted">No tickers qualified this week.</div>')
+            return
+        # Tall enough to show every row without an inner scrollbar.
+        event = st.dataframe(theme.style_table(df), column_config=RANK_COLUMNS, hide_index=True,
+                             height=35 * (len(df) + 1) + 3, on_select="rerun",
+                             selection_mode="single-row", width="stretch", key=key)
+        rows = event.selection.rows
+        if rows:
+            st.session_state["ticker"] = df.iloc[rows[0]]["ticker"]
+            if drilldown_page is not None:
+                st.switch_page(drilldown_page)
 
 
 def rankings() -> None:
-    st.title("Weekly rankings")
     with db() as con:
         weeks = queries.available_weeks(con)
         if not weeks:
-            st.info("No weekly rankings yet. Run `python -m jobs.rank_weekly` after a week of collection.")
+            html(theme.label("Weekly rankings"))
+            html(theme.title("No rankings yet"))
+            st.info("Run `python -m jobs.rank_weekly` after a week of collection.")
             return
         week_start = pick_week(weeks)
         bull, bear = queries.ranked_tables(con, week_start, TOP_N)
-        n = queries.eligible_count(con, week_start)
+        tape = queries.week_tape(con, week_start)
 
     week = queries.week_for(week_start)
-    st.caption(f"Posts from {week.start:%a %d %b} to {week.friday:%a %d %b %Y} (UTC). "
-               f"{n} tickers passed the eligibility filters. Click a row to see the posts behind it.")
-    ranked_table("Heating up, bullish", bull, "bull")
-    ranked_table("Heating up, bearish", bear, "bear")
+    html(theme.label(f"{week.start:%a %d %b} – {week.friday:%a %d %b %Y} · UTC"))
+    html(theme.title("Weekly rankings"))
+    html('<p class="sm-sub">Where attention and sentiment are shifting. '
+         'Click a row to read the posts behind it.</p>')
+    if not tape.empty:
+        html(theme.tape(tape))
+
+    c1, c2, c3, c4 = st.columns(4)
+    with c1, st.container(key="card-stat-eligible"):
+        html(theme.stat("Eligible tickers", str(len(tape)), "passed the filters"))
+    with c2, st.container(key="card-stat-mentions"):
+        html(theme.stat("Mentions", f"{int(tape['mentions'].sum()):,}" if not tape.empty else "0",
+                        "across eligible tickers"))
+    with c3, st.container(key="card-glow-stat-bull"):
+        top = bull.iloc[0] if not bull.empty else None
+        html(theme.stat("Top bullish", top["ticker"] if top is not None else "–",
+                        f"composite {top['composite']:.2f}" if top is not None else "none qualified",
+                        tone="green"))
+    with c4, st.container(key="card-stat-bear"):
+        top = bear.iloc[0] if not bear.empty else None
+        html(theme.stat("Top bearish", top["ticker"] if top is not None else "–",
+                        f"composite {top['composite']:.2f}" if top is not None else "none qualified",
+                        tone="red"))
+
+    ranked_table("Heating up · bullish", theme.GREEN, bull, "bull")
+    ranked_table("Heating up · bearish", theme.RED, bear, "bear")
     if bull["ret_5d"].isna().all() and bear["ret_5d"].isna().all():
-        st.caption("Price and volume columns fill in once price data is collected (phase 5).")
+        html('<div class="sm-muted">Price and volume columns fill in once price data is '
+             'collected (phase 5).</div>')
 
 
 def trend_chart(trend):
-    base = alt.Chart(trend).encode(x=alt.X("day:T", title=None))
-    bars = base.mark_bar(opacity=0.45).encode(
-        y=alt.Y("mentions:Q", title="Mentions / day"),
-        tooltip=["day:T", "mentions:Q", alt.Tooltip("sentiment:Q", format="+.2f")],
+    base = alt.Chart(trend).encode(x=alt.X("day:T", title=None, axis=alt.Axis(format="%d %b")))
+    bars = base.mark_bar(color=theme.NEUTRAL_BAR, opacity=0.85, cornerRadiusTopLeft=2,
+                         cornerRadiusTopRight=2).encode(
+        y=alt.Y("mentions:Q", title="MENTIONS / DAY"),
+        tooltip=[alt.Tooltip("day:T", format="%d %b %Y"), "mentions:Q",
+                 alt.Tooltip("sentiment:Q", format="+.2f")],
     )
-    line = base.mark_line(point=True, color="#d62728").encode(
-        y=alt.Y("sentiment:Q", title="Mean sentiment", scale=alt.Scale(domain=[-1, 1])),
+    line = base.mark_line(color=theme.GREEN, strokeWidth=2.5,
+                          point=alt.OverlayMarkDef(color=theme.GREEN, size=18)).encode(
+        y=alt.Y("sentiment:Q", title="MEAN SENTIMENT", scale=alt.Scale(domain=[-1, 1])),
     ).transform_filter("isValid(datum.sentiment)")
-    return alt.layer(bars, line).resolve_scale(y="independent").properties(height=280)
+    chart = alt.layer(bars, line).resolve_scale(y="independent").properties(height=280)
+    return theme.chart_config(chart)
 
 
 def drilldown() -> None:
-    st.title("Ticker drill-down")
     with db() as con:
         tickers = queries.tracked_tickers(con)
         if not tickers:
+            html(theme.label("Ticker drill-down"))
+            html(theme.title("No tickers yet"))
             st.info("No tickers have been mentioned yet.")
             return
         weeks = queries.available_weeks(con)
@@ -151,48 +184,63 @@ def drilldown() -> None:
         days = st.sidebar.select_slider("Trend window (days)", [30, 60, 90, 180], value=90)
 
         week = queries.week_for(week_start) if week_start else None
-        end = week.end if week else datetime.now().replace(hour=0, minute=0, second=0, microsecond=0) + timedelta(days=1)
+        today = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
+        end = week.end if week else today + timedelta(days=1)
         trend = queries.daily_trend(con, ticker, end, days, MODEL)
         history = queries.weekly_history(con, ticker)
-        posts = queries.top_posts(con, ticker, week, MODEL) if week else None
         name = queries.company_name(con, ticker)
+        if week:
+            summary = queries.week_summary(con, ticker, week, MODEL)
+            communities = queries.community_breakdown(con, ticker, week, MODEL)
+            posts = queries.top_posts(con, ticker, week, MODEL)
 
-    st.header(f"{ticker}" + (f" · {name}" if name else ""))
+    html(theme.label(f"Sentiment · {week_label(week_start)}" if week else "Sentiment"))
+    html(theme.title(name or ticker, ticker if name else None))
 
-    st.subheader("Mentions and sentiment")
-    st.altair_chart(trend_chart(trend), width="stretch")
-    if trend["close"].notna().any():
-        st.subheader("Price")
-        st.line_chart(trend.set_index("day")["close"], height=200)
-    else:
-        st.caption("Price chart appears once price data is collected (phase 5).")
+    if week:
+        left, right = st.columns([1, 2])
+        with left, st.container(key="card-glow-gauge"):
+            html(theme.label("Weekly score"))
+            ranked = summary["ranked_sentiment"] is not None
+            score = summary["ranked_sentiment"] if ranked else summary["mean_score"]
+            html(theme.gauge(score, summary["momentum"], ranked))
+        with right, st.container(key="card-mix"):
+            html(theme.label("Mention mix"))
+            html(theme.mix_bar(summary["pos"], summary["neu"], summary["neg"]))
+            html('<div style="height:18px"></div>' + theme.label("By community"))
+            if communities.empty:
+                html('<div class="sm-muted">No posts this week.</div>')
+            else:
+                html(theme.community_bars(communities))
 
-    st.subheader("Weekly signals")
-    if history.empty:
-        st.caption("This ticker hasn't passed the eligibility filters in any ranked week yet.")
-    else:
-        st.dataframe(history, hide_index=True, width="stretch", column_config={
-            "week_start": st.column_config.DateColumn("Week of"),
-            **{c: st.column_config.NumberColumn(format="%.2f")
-               for c in ("attention_z", "sentiment", "momentum", "composite_bull", "composite_bear")},
-        })
-
-    if week is not None:
-        st.subheader(f"Top posts, week of {week_start:%d %b %Y}")
-        if posts is None or posts.empty:
-            st.caption("No posts about this ticker that week.")
+    with st.container(key="card-trend"):
+        html(theme.label(f"Mentions and sentiment · last {days} days"))
+        st.altair_chart(trend_chart(trend), width="stretch")
+        if trend["close"].notna().any():
+            st.line_chart(trend.set_index("day")["close"], height=200, color=theme.GREEN)
         else:
-            # Link right after the title so it stays visible on narrow screens.
-            order = ["created_at", "community", "title", "url", "sentiment", "label",
-                     "engagement", "match_type"]
-            st.dataframe(posts[order], hide_index=True, width="stretch", column_config={
-                "created_at": st.column_config.DatetimeColumn("Posted (UTC)", format="D MMM, HH:mm"),
-                "community": st.column_config.TextColumn("Community"),
-                "title": st.column_config.TextColumn("Title", width="medium"),
+            html('<div class="sm-muted">Price chart appears once price data is collected (phase 5).</div>')
+
+    with st.container(key="card-history"):
+        html(theme.label("Weekly signals"))
+        if history.empty:
+            html('<div class="sm-muted">This ticker hasn\'t passed the eligibility filters '
+                 'in any ranked week yet.</div>')
+        else:
+            st.dataframe(theme.style_table(history), hide_index=True, width="stretch", column_config={
+                "week_start": st.column_config.DateColumn("Week of", format="D MMM YYYY"),
+                "mentions": st.column_config.NumberColumn("Mentions"),
+                "attention_z": st.column_config.NumberColumn("Attention z", format="%.2f"),
                 "sentiment": st.column_config.NumberColumn("Sentiment", format="%+.2f"),
-                "label": st.column_config.TextColumn("Label", width="small"),
-                "engagement": st.column_config.NumberColumn("Engagement"),
-                "match_type": st.column_config.TextColumn("Matched by", width="small"),
-                "url": st.column_config.LinkColumn("Link", display_text="open"),
+                "momentum": st.column_config.NumberColumn("Momentum", format="%+.2f"),
+                "composite_bull": st.column_config.NumberColumn("Bull composite", format="%.2f"),
+                "composite_bear": st.column_config.NumberColumn("Bear composite", format="%.2f"),
             })
 
+    if week:
+        with st.container(key="card-posts"):
+            html(theme.label(f"Top posts · {week_label(week_start)}"))
+            if posts.empty:
+                html('<div class="sm-muted">No posts about this ticker that week.</div>')
+            else:
+                html(theme.post_list(posts))

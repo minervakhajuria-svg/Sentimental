@@ -1,4 +1,4 @@
-# Stock Sentiment Analyser: Project Spec
+# Sentimental: Stock Sentiment Analyser Project Spec
 
 ## 1. Purpose
 A personal research tool that scans online discussion about US-listed stocks and produces a **weekly ranked list** of tickers where attention and sentiment are shifting, ideally *before* price reacts.
@@ -198,3 +198,4 @@ The assumption "chatter leads price" is **unproven**; test it.
   - The app opens a short-lived read-only DuckDB connection per render, so it never blocks the collection/ranking jobs; if a job holds the write lock it shows a "busy" message.
   - The disclaimer shows in the sidebar and at the bottom of every page.
   - Demo data: `python tests/demo_data.py` writes `data/demo.duckdb` (invented posts); point the app at it with `SENTIMENT_DB_PATH=data/demo.duckdb`. `.claude/launch.json` has a `streamlit-demo` config for this.
+- **App name and look (2026-10-04):** the app is called **Sentimental**. Fluorescent green on black, from the user's "Neon green + black finance UI" design canvas: background `#0A0A0A`, cards `#111314` with `#1F2421` borders and 16px radius, accent `#39FF14` with a soft glow, bearish `#FF4D4D`, muted text `#8A8F98`; Space Grotesk for UI text, JetBrains Mono for numbers and uppercase section labels. Base theme is in `.streamlit/config.toml`; the rest (logo, cards, gauge, mix bar, post list, chart styling) is in `src/app/theme.py`. Containers keyed `card-*` get card styling; `card-glow-*` adds the glow. All post text rendered as HTML goes through `html.escape`.
