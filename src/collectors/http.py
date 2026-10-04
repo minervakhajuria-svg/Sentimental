@@ -61,3 +61,17 @@ def get_json(
             log.debug("network error %s", type(e).__name__)
         log.warning("%s: retrying in %ss (attempt %d)", url, wait, attempt + 1)
         sleep(wait)
+
+
+def _urlopen_text(url: str, headers: dict[str, str], timeout: float) -> str:
+    req = urllib.request.Request(url, headers={"User-Agent": USER_AGENT, **headers})
+    try:
+        with urllib.request.urlopen(req, timeout=timeout) as resp:
+            return resp.read().decode("utf-8", errors="replace")
+    except urllib.error.HTTPError as e:
+        raise HttpError(e.code, url.split("?")[0]) from None
+
+
+def get_text(url: str, headers: dict[str, str] | None = None, **kwargs) -> str:
+    """Like get_json, but returns the body as text (e.g. XML filings)."""
+    return get_json(url, headers=headers, opener=_urlopen_text, **kwargs)

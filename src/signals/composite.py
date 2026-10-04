@@ -89,7 +89,7 @@ def ranked_lists(con: duckdb.DuckDBPyConnection, week_start, top_n: int) -> tupl
     """
     q = """
         SELECT ticker, composite_{side} AS composite, mentions, attention_z, sentiment,
-               momentum, breadth, ret_5d, ret_30d, rel_volume, early_chatter_flag
+               momentum, breadth, ret_5d, ret_30d, rel_volume, early_chatter_flag, insider_buy_flag
         FROM weekly_signals
         WHERE week_start = ? AND attention_z > 0 AND sentiment {cmp} 0
         ORDER BY composite_{side} DESC

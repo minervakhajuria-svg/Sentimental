@@ -20,8 +20,10 @@ from jobs import extract_tickers as extract_tickers_job
 from jobs.collect_prices import provider_from_config, update_prices
 from jobs.score_posts import score_pending
 from market.context import add_context
+from market.insiders import EdgarClient, insider_buy_flags, update_insider_cache
 from market.prices import MarketDataProvider
 from scoring.finbert import Scorer
+from scoring.llm_second_pass import ClaudeScorer, second_pass
 from settings import load_config, setup_logging
 from signals.aggregate import Week, compute_components
 from signals.composite import add_composites, apply_eligibility, ranked_lists, write_signals
@@ -35,7 +37,9 @@ DISCLAIMER = "Screening aid only, not investment advice."
 
 def rank(con: duckdb.DuckDBPyConnection, cfg: dict, week: Week,
          scorer: Scorer | None = None,
-         price_provider: MarketDataProvider | None = None) -> tuple[pd.DataFrame, pd.DataFrame]:
+         price_provider: MarketDataProvider | None = None,
+         second_scorer: ClaudeScorer | None = None,
+         edgar: EdgarClient | None = None) -> tuple[pd.DataFrame, pd.DataFrame]:
     """Compute and store one week's signals; return (bullish, bearish) lists.
 
     Pass `scorer=None` to skip scoring (e.g. when scores are already up to date)
@@ -44,6 +48,13 @@ def rank(con: duckdb.DuckDBPyConnection, cfg: dict, week: Week,
     extract_tickers_job.extract(con, cfg)
     if scorer is not None:
         score_pending(con, scorer, cfg["scoring"])
+    if second_scorer is not None:
+        try:
+            second_pass(con, second_scorer, cfg["llm_second_pass"], base_model=scorer.name if scorer else "finbert",
+                        max_chars=cfg["scoring"]["max_chars"])
+        except Exception:
+            # FinBERT scores remain as the fallback, so the ranking still runs.
+            log.exception("LLM second pass failed; ranking with first-pass scores only")
 
     scfg = cfg["signals"]
     components = compute_components(con, week, scfg)
@@ -63,11 +74,30 @@ def rank(con: duckdb.DuckDBPyConnection, cfg: dict, week: Week,
             log.exception("price refresh failed; using stored prices for context")
     prices = db.load_prices(con, tickers, start, week.friday)
     signals = add_context(signals, prices, week, cfg["context"])
+    signals = add_insider_flags(con, signals, week, cfg.get("insiders", {}), edgar)
     log.info("context: price data for %d/%d tickers, %d early-chatter flags",
              prices["ticker"].nunique() if len(prices) else 0, len(tickers),
              int(signals["early_chatter_flag"].sum()) if len(signals) else 0)
     write_signals(con, week, signals)
     return ranked_lists(con, week.week_start, scfg["top_n"])
+
+
+def add_insider_flags(con, signals: pd.DataFrame, week: Week, icfg: dict,
+                      edgar: EdgarClient | None) -> pd.DataFrame:
+    """insider_buy_flag per eligible ticker; NULL when insider data isn't configured."""
+    if signals.empty or not icfg.get("enabled"):
+        return signals
+    tickers = list(signals.index)
+    if edgar is not None:
+        try:
+            update_insider_cache(con, edgar, tickers,
+                                 week.friday - timedelta(days=icfg["lookback_days"]), week.friday)
+        except Exception:
+            log.exception("insider refresh failed; using cached filings")
+    elif not con.execute("SELECT count(*) FROM insider_filings").fetchone()[0]:
+        return signals  # nothing fetched and nothing cached: leave the flag NULL
+    flags = insider_buy_flags(con, tickers, week.friday, icfg["lookback_days"])
+    return signals.assign(insider_buy_flag=[flags[t] for t in tickers])
 
 
 def format_list(title: str, df: pd.DataFrame) -> str:
@@ -99,7 +129,16 @@ def main(argv: list[str] | None = None) -> int:
             scorer = FinBERTScorer(s["model_name"], s["batch_size"])
         con = db.connect(cfg["storage"]["db_path"])
         try:
-            bull, bear = rank(con, cfg, week, scorer, provider_from_config(cfg))
+            second = None
+            if not args.no_score and cfg.get("llm_second_pass", {}).get("enabled"):
+                second = ClaudeScorer.from_config(cfg["llm_second_pass"])
+            edgar = None
+            if cfg.get("insiders", {}).get("enabled"):
+                try:
+                    edgar = EdgarClient.from_env(cfg["insiders"])
+                except RuntimeError as e:
+                    log.warning("insider flag off: %s", e)
+            bull, bear = rank(con, cfg, week, scorer, provider_from_config(cfg), second, edgar)
         finally:
             con.close()
     except Exception:

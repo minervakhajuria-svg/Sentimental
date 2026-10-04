@@ -16,6 +16,7 @@ import duckdb
 import numpy as np
 import pandas as pd
 
+from storage import db
 from signals.filters import apply_noise_filters, cap_per_author
 
 
@@ -50,19 +51,22 @@ class Week:
 
 def load_mentions(con: duckdb.DuckDBPyConnection, start: datetime, end: datetime,
                   model: str, min_confidence: float) -> pd.DataFrame:
-    """One row per (post, ticker) in [start, end), with the post's sentiment if scored."""
+    """One row per (post, ticker) in [start, end), with its sentiment if scored.
+
+    `model` is one model name or a priority list (first available score wins).
+    """
     return con.execute(
-        """
+        f"""
         SELECT p.id AS post_id, pt.ticker, p.source, p.community, p.author_id,
                p.author_age_days, p.author_karma, p.created_at, p.engagement,
                p.content_hash, p.title, p.body, pt.confidence, s.score
         FROM posts p
         JOIN post_tickers pt ON pt.post_id = p.id
-        LEFT JOIN post_scores s
-               ON s.post_id = pt.post_id AND s.ticker = pt.ticker AND s.model = ?
+        LEFT JOIN {db.EFFECTIVE_SCORES} s
+               ON s.post_id = pt.post_id AND s.ticker = pt.ticker
         WHERE p.created_at >= ? AND p.created_at < ? AND pt.confidence >= ?
         """,
-        [model, start, end, min_confidence],
+        [db.as_models(model), start, end, min_confidence],
     ).df()
 
 
@@ -83,7 +87,8 @@ def compute_components(con: duckdb.DuckDBPyConnection, week: Week, cfg: dict) ->
     """
     baseline_days = cfg["baseline_days"]
     start = week.start - timedelta(days=baseline_days)
-    df = load_mentions(con, start, week.end, cfg["sentiment_model"], cfg["min_match_confidence"])
+    models = cfg.get("sentiment_models") or cfg["sentiment_model"]
+    df = load_mentions(con, start, week.end, models, cfg["min_match_confidence"])
     if df.empty:
         return pd.DataFrame()
 

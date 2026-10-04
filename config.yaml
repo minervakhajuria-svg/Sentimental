@@ -79,8 +79,19 @@ scoring:
   max_chars: 2000        # text per (post, ticker) sent to the model
   commit_every: 256      # pairs per committed chunk
 
+llm_second_pass:
+  enabled: false             # costs money: needs ANTHROPIC_API_KEY in .env; opt in when ready
+  model: claude-haiku-4-5    # small, cheap model (spec §8)
+  use_batch: true            # Message Batches API: half price, usually done within the hour
+  max_wait_minutes: 120
+  ambiguity_threshold: 0.3   # re-score FinBERT calls with |score| below this
+  top_engagement_per_ticker_week: 5
+  lookback_days: 14          # only recent posts
+  max_items_per_run: 2000    # hard cap on spend per run
+
 signals:
-  sentiment_model: finbert
+  # Score priority per (post, ticker): Claude's second pass where it exists, else FinBERT.
+  sentiment_models: [claude, finbert]
   # Matches below this confidence are ignored (0.5 keeps bare matches).
   min_match_confidence: 0.5
   source_weights:
@@ -152,6 +163,11 @@ context:
   divergence_warning:        # rising volume + falling price + bullish chatter
     min_rel_volume: 1.2
     min_price_drop: 0.02     # 5-day fall bigger than this counts as "falling"
+
+insiders:
+  enabled: true              # needs SEC_USER_AGENT in .env; otherwise the flag stays blank
+  lookback_days: 30          # purchases filed within this window up to the week's Friday
+  pause_seconds: 0.15        # SEC fair access: under 10 requests/second
 
 analysis:
   min_weeks: 12              # below this, results are flagged as noise

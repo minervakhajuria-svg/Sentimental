@@ -13,6 +13,7 @@ dependencies = [
     "torch>=2.4",
     "transformers>=4.40",
     "streamlit>=1.40",
+    "anthropic>=1.0",
 ]
 
 [project.optional-dependencies]

@@ -1,0 +1,3 @@
+{"0": {"cik_str": 1, "ticker": "EXMP", "title": "Example Corp"},
+ "1": {"cik_str": 2, "ticker": "OTHR", "title": "Other Inc"},
+ "2": {"cik_str": 3, "ticker": "BRK-B", "title": "Class B Holdings"}}

@@ -27,7 +27,7 @@ APP_NAME = "Sentimental"
 DISCLAIMER = "Screening aid only, not investment advice."
 
 cfg = load_config(os.environ.get("SENTIMENT_CONFIG"))
-MODEL = cfg["signals"]["sentiment_model"]
+MODEL = cfg["signals"].get("sentiment_models") or cfg["signals"]["sentiment_model"]
 TOP_N = cfg["signals"]["top_n"]
 CONTEXT_CFG = cfg["context"]
 ROW_PX = 40
@@ -94,6 +94,8 @@ RANK_COLUMNS = {
     "rel_volume": st.column_config.NumberColumn("Rel. volume", format="%.2f"),
     "early_chatter_flag": st.column_config.CheckboxColumn("Early chatter",
         help="Top-decile composite while price hasn't moved yet and volume is rising"),
+    "insider_buy_flag": st.column_config.CheckboxColumn("Insider buy",
+        help="An insider filed an open-market purchase (SEC Form 4) in the last 30 days"),
 }
 
 
@@ -234,6 +236,8 @@ def drilldown() -> None:
         badges = []
         if summary.get("early_chatter_flag"):
             badges.append(theme.badge("EARLY CHATTER"))
+        if summary.get("insider_buy_flag"):
+            badges.append(theme.badge("INSIDER BUY (FORM 4)", theme.TEXT))
         if divergence_warning({**summary, "sentiment": summary["ranked_sentiment"] or 0}, CONTEXT_CFG):
             badges.append(theme.badge("DIVERGENCE: VOLUME UP, PRICE DOWN", theme.RED))
         if badges:

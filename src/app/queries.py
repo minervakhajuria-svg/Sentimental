@@ -13,10 +13,12 @@ import pandas as pd
 
 from signals.aggregate import Week
 from signals.composite import ranked_lists
+from storage import db
 
 DISPLAY_COLUMNS = [
     "ticker", "company_name", "composite", "mentions", "attention_z", "sentiment",
     "momentum", "breadth", "ret_5d", "ret_30d", "rel_volume", "early_chatter_flag",
+    "insider_buy_flag",
 ]
 
 
@@ -76,7 +78,7 @@ def daily_trend(con: duckdb.DuckDBPyConnection, ticker: str, end: datetime,
     """
     start = end - timedelta(days=days)
     return con.execute(
-        """
+        f"""
         WITH days AS (
             SELECT CAST(d AS DATE) AS day
             FROM generate_series(CAST(? AS DATE), CAST(? AS DATE) - INTERVAL 1 DAY,
@@ -87,8 +89,8 @@ def daily_trend(con: duckdb.DuckDBPyConnection, ticker: str, end: datetime,
                    avg(s.score) AS sentiment
             FROM post_tickers pt
             JOIN posts p ON p.id = pt.post_id
-            LEFT JOIN post_scores s
-                   ON s.post_id = pt.post_id AND s.ticker = pt.ticker AND s.model = ?
+            LEFT JOIN {db.EFFECTIVE_SCORES} s
+                   ON s.post_id = pt.post_id AND s.ticker = pt.ticker
             WHERE pt.ticker = ? AND p.created_at >= ? AND p.created_at < ?
             GROUP BY 1
         )
@@ -98,7 +100,7 @@ def daily_trend(con: duckdb.DuckDBPyConnection, ticker: str, end: datetime,
         LEFT JOIN prices_daily pr ON pr.ticker = ? AND pr.date = days.day
         ORDER BY days.day
         """,
-        [start, end, model, ticker, start, end, ticker],
+        [start, end, db.as_models(model), ticker, start, end, ticker],
     ).df()
 
 
@@ -121,21 +123,21 @@ def top_posts(con: duckdb.DuckDBPyConnection, ticker: str, week: Week,
     Reposts (same content hash) are shown once, matching the aggregation.
     """
     return con.execute(
-        """
+        f"""
         SELECT p.created_at, p.source, p.community, coalesce(p.title, p.body) AS title,
                s.score AS sentiment, s.label,
                p.engagement, pt.match_type, p.url
         FROM post_tickers pt
         JOIN posts p ON p.id = pt.post_id
-        LEFT JOIN post_scores s
-               ON s.post_id = pt.post_id AND s.ticker = pt.ticker AND s.model = ?
+        LEFT JOIN {db.EFFECTIVE_SCORES} s
+               ON s.post_id = pt.post_id AND s.ticker = pt.ticker
         WHERE pt.ticker = ? AND p.created_at >= ? AND p.created_at < ?
         QUALIFY row_number() OVER (PARTITION BY coalesce(p.content_hash, p.id)
                                    ORDER BY p.created_at) = 1
         ORDER BY p.engagement DESC NULLS LAST, p.created_at DESC
         LIMIT ?
         """,
-        [model, ticker, week.start, week.end, limit],
+        [db.as_models(model), ticker, week.start, week.end, limit],
     ).df()
 
 
@@ -158,7 +160,7 @@ def week_summary(con: duckdb.DuckDBPyConnection, ticker: str, week: Week, model:
     fallback when the ticker wasn't eligible that week.
     """
     row = con.execute(
-        """
+        f"""
         SELECT count(*) AS posts,
                avg(s.score) AS mean_score,
                count(*) FILTER (WHERE s.label = 'pos') AS pos,
@@ -166,15 +168,15 @@ def week_summary(con: duckdb.DuckDBPyConnection, ticker: str, week: Week, model:
                count(*) FILTER (WHERE s.label = 'neg') AS neg
         FROM post_tickers pt
         JOIN posts p ON p.id = pt.post_id
-        LEFT JOIN post_scores s
-               ON s.post_id = pt.post_id AND s.ticker = pt.ticker AND s.model = ?
+        LEFT JOIN {db.EFFECTIVE_SCORES} s
+               ON s.post_id = pt.post_id AND s.ticker = pt.ticker
         WHERE pt.ticker = ? AND p.created_at >= ? AND p.created_at < ?
         """,
-        [model, ticker, week.start, week.end],
+        [db.as_models(model), ticker, week.start, week.end],
     ).fetchone()
     summary = dict(zip(["posts", "mean_score", "pos", "neu", "neg"], row))
     cols = ["sentiment", "momentum", "ret_5d", "ret_30d", "rel_volume", "updown_vol_ratio",
-            "early_chatter_flag"]
+            "early_chatter_flag", "insider_buy_flag"]
     signal = con.execute(
         f"SELECT {', '.join(cols)} FROM weekly_signals WHERE week_start = ? AND ticker = ?",
         [week.week_start, ticker],
@@ -189,16 +191,16 @@ def community_breakdown(con: duckdb.DuckDBPyConnection, ticker: str, week: Week,
                         model: str) -> pd.DataFrame:
     """Posts and mean sentiment per community for one ticker and week."""
     return con.execute(
-        """
+        f"""
         SELECT p.source, p.community, count(*) AS posts, avg(s.score) AS sentiment
         FROM post_tickers pt
         JOIN posts p ON p.id = pt.post_id
-        LEFT JOIN post_scores s
-               ON s.post_id = pt.post_id AND s.ticker = pt.ticker AND s.model = ?
+        LEFT JOIN {db.EFFECTIVE_SCORES} s
+               ON s.post_id = pt.post_id AND s.ticker = pt.ticker
         WHERE pt.ticker = ? AND p.created_at >= ? AND p.created_at < ?
         GROUP BY 1, 2 ORDER BY posts DESC
         """,
-        [model, ticker, week.start, week.end],
+        [db.as_models(model), ticker, week.start, week.end],
     ).df()
 
 

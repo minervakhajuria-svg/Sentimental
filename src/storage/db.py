@@ -281,3 +281,21 @@ def most_mentioned(con: duckdb.DuckDBPyConnection, since, n: int) -> list[str]:
            WHERE p.created_at >= ? GROUP BY 1 ORDER BY count(*) DESC LIMIT ?""",
         [since, n],
     ).fetchall()]
+
+
+# Per (post, ticker), the score from the first model in a priority list that has
+# one, e.g. ["claude", "finbert"]: Claude's second-pass score where it exists,
+# FinBERT otherwise. Binds ONE parameter (the list), so it drops into an existing
+# query where a single `s.model = ?` used to be without reordering parameters.
+EFFECTIVE_SCORES = """(
+    SELECT ps.post_id, ps.ticker, ps.label, ps.score
+    FROM post_scores ps, (SELECT ? AS models) m
+    WHERE list_position(m.models, ps.model) > 0
+    QUALIFY row_number() OVER (PARTITION BY ps.post_id, ps.ticker
+                               ORDER BY list_position(m.models, ps.model)) = 1
+)"""
+
+
+def as_models(model) -> list[str]:
+    """Accept one model name or a priority list."""
+    return [model] if isinstance(model, str) else list(model)

@@ -74,3 +74,13 @@ CREATE TABLE IF NOT EXISTS weekly_signals (
     early_chatter_flag BOOLEAN,
     PRIMARY KEY (week_start, ticker)
 );
+
+-- Parsed SEC Form 4 filings (cache, so each filing is fetched once).
+CREATE TABLE IF NOT EXISTS insider_filings (
+    accession      TEXT PRIMARY KEY,
+    ticker         TEXT NOT NULL,
+    filing_date    DATE NOT NULL,
+    purchase_count INTEGER,          -- open-market purchases (code P, acquired)
+    purchase_value DOUBLE,           -- shares * price, USD
+    fetched_at     TIMESTAMP
+);
