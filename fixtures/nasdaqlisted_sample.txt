@@ -1,0 +1,22 @@
+Symbol|Security Name|Market Category|Test Issue|Financial Status|Round Lot Size|ETF|NextShares
+AAAP|Pacer Barings CLO Market Flex ETF|G|N|N|100|Y|N
+AACIU|Armada Acquisition Corp. III - Units|G|N|N|100|N|N
+AACIW|Armada Acquisition Corp. III - Warrant|G|N|N|100|N|N
+AAPL|Apple Inc. - Common Stock|Q|N|N|40|N|N
+AMD|Advanced Micro Devices, Inc. - Common Stock|Q|N|N|100|N|N
+AMZN|Amazon.com, Inc. - Common Stock|Q|N|N|100|N|N
+ARM|Arm Holdings plc - American Depositary Shares|Q|N|N|100|N|N
+COIN|Coinbase Global, Inc. - Class A Common Stock|Q|N|N|100|N|N
+GOOG|Alphabet Inc. - Class C Capital Stock|Q|N|N|40|N|N
+GOOGL|Alphabet Inc. - Class A Common Stock|Q|N|N|40|N|N
+HOOD|Robinhood Markets, Inc. - Class A Common Stock|Q|N|N|100|N|N
+INTC|Intel Corporation - Common Stock|Q|N|N|100|N|N
+META|Meta Platforms, Inc. - Class A Common Stock|Q|N|N|40|N|N
+MSFT|Microsoft Corporation - Common Stock|Q|N|N|40|N|N
+NVDA|NVIDIA Corporation - Common Stock|Q|N|N|100|N|N
+PLTR|Palantir Technologies Inc. - Class A Common Stock|Q|N|N|100|N|N
+SOFI|SoFi Technologies, Inc.  - Common Stock|Q|N|N|100|N|N
+TSLA|Tesla, Inc.  - Common Stock|Q|N|N|40|N|N
+ZYME|Zymeworks Inc. - Common Stock|Q|N|N|100|N|N
+ZXZZT|NASDAQ TEST STOCK|G|Y|N|100|N|N
+File Creation Time: 1002202621:31|||||||

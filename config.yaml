@@ -27,3 +27,34 @@ reddit:
   # Retry/backoff for transient API errors (per community).
   max_retries: 3
   backoff_seconds: 5
+
+universe:
+  exchanges: [NASDAQ, NYSE, NYSE American]
+  min_market_cap: 300_000_000        # USD
+  min_avg_dollar_volume: 5_000_000   # USD/day, trailing 30 sessions
+  # Refuse to replace the universe if fewer listings than this have market
+  # data (i.e. the data source was down or rate-limiting).
+  min_data_coverage: 0.5
+  yfinance:
+    chunk_size: 200
+    pause_seconds: 1.0
+
+extraction:
+  confidence:
+    cashtag: 0.95
+    alias: 0.75
+    bare: 0.5
+  # 1-letter tickers (F, T, V, C) only match via cashtag or alias.
+  bare_min_length: 2
+  # Skip bare matches on a line with this many all-caps non-ticker words.
+  shouting_min_words: 3
+  # Any of these (or a $ amount / %) counts as finance context for bare matches.
+  finance_context_words: [
+    stock, stocks, share, shares, calls, puts, call, put, options, option,
+    strike, expiry, earnings, revenue, guidance, eps, dividend, buy, bought,
+    sell, sold, selling, buying, short, shorts, long, position, portfolio,
+    bull, bullish, bear, bearish, price, target, valuation, ticker, market,
+    rally, dip, squeeze, ipo, analyst, upgrade, downgrade, chart, support,
+    resistance, hold, holding, invest, investing, trade, trading, yolo, dd,
+  ]
+

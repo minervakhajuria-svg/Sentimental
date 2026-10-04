@@ -77,3 +77,54 @@ def upsert_posts(con: duckdb.DuckDBPyConnection, posts: Iterable[Post]) -> tuple
         raise
     updated = len(existing)
     return len(batch) - updated, updated
+
+
+def posts_without_tickers(con: duckdb.DuckDBPyConnection) -> list[tuple[str, str, str]]:
+    """(id, title, body) of posts with no post_tickers rows yet.
+
+    Posts that matched nothing get re-checked on later runs. That's cheap
+    (regex only) and means a universe refresh picks up newly listed tickers.
+    """
+    return con.execute(
+        """
+        SELECT id, title, body FROM posts p
+        WHERE NOT EXISTS (SELECT 1 FROM post_tickers t WHERE t.post_id = p.id)
+        """
+    ).fetchall()
+
+
+def all_posts_text(con: duckdb.DuckDBPyConnection) -> list[tuple[str, str, str]]:
+    return con.execute("SELECT id, title, body FROM posts").fetchall()
+
+
+def replace_post_tickers(
+    con: duckdb.DuckDBPyConnection, matches: dict[str, list]
+) -> int:
+    """Set the ticker matches for each given post, replacing any old ones.
+
+    `matches` maps post_id -> list of Match (ticker, match_type, confidence).
+    Replace rather than append, so re-extracting after an alias or blocklist
+    change can also remove matches. Returns the number of rows written.
+    """
+    if not matches:
+        return 0
+    rows = [
+        [post_id, m.ticker, m.match_type, m.confidence]
+        for post_id, ms in matches.items()
+        for m in ms
+    ]
+    con.execute("BEGIN TRANSACTION")
+    try:
+        con.execute("DELETE FROM post_tickers WHERE post_id IN (SELECT unnest(?))", [list(matches)])
+        if rows:
+            con.executemany(
+                "INSERT INTO post_tickers (post_id, ticker, match_type, confidence) VALUES (?, ?, ?, ?)",
+                rows,
+            )
+        con.execute("COMMIT")
+    except Exception:
+        con.execute("ROLLBACK")
+        raise
+    return len(rows)
+
+

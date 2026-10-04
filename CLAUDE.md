@@ -66,7 +66,7 @@ sentiment-analyser/
 | content_hash | TEXT | for de-duplication |
 
 **post_tickers**: one row per (post, ticker) match
-`post_id, ticker, match_type (cashtag|alias|name), confidence`
+`post_id, ticker, match_type (cashtag|alias|bare), confidence`
 
 **post_scores**: one row per (post, ticker, model)
 `post_id, ticker, model, label (pos|neg|neu), score (-1..1), scored_at`
@@ -179,3 +179,9 @@ The assumption "chatter leads price" is **unproven**; test it.
 - Phase 1 collects Reddit **submissions only** (not comments). Usernames are stored as a 16-char SHA-256 hash; `url` is the Reddit permalink; `engagement` = score + num_comments.
 - Upsert on `id` refreshes `engagement` (and fills author details if newly available) but never overwrites title/body/created_at/collected_at, so later "[removed]" edits can't erase text.
 - Daily runs look back `collect.lookback_hours` (36h) so consecutive runs overlap; upserts make this harmless.
+- **Phase 2 (ticker extraction): done 2026-10-04.**
+  - Universe = Nasdaq Trader symbol directory (`nasdaqlisted.txt`, `otherlisted.txt`): NASDAQ, NYSE, NYSE American common equity; ETFs, test issues, warrants, rights, units, preferreds and notes excluded (LP common units kept). Share classes use a dot (`BRK.B`); converted to Yahoo's dash form only inside `market/prices.py`.
+  - Market cap and 30-day dollar volume via yfinance (`YFinanceProvider` behind `MarketDataProvider`). Liquidity is fetched in bulk first; market cap only for tickers above the liquidity floor (one request each). All listings are stored; floors apply at load time, so they can be changed in config without a rebuild. A refresh where fewer than `min_data_coverage` of listings have data is refused, and the old universe is kept.
+  - Refresh weekly: `python -m jobs.build_universe` (~20-30 min).
+  - Match types: `cashtag` (0.95), `alias` (0.75, curated `aliases.csv` with a case-sensitivity flag for common words like Apple/Visa/Ford), `bare` (0.5). Bare matches need finance context and length >= 2, must not be on the blocklist, and are skipped on "shouting" lines (>= 3 all-caps non-ticker words). URLs and r/ or u/ references are stripped first.
+  - `collect_daily` tags new posts after collecting (exit 2 if tagging fails). Run `python -m jobs.extract_tickers --rebuild` after editing aliases or the blocklist.

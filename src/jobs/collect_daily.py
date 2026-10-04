@@ -1,4 +1,5 @@
-"""Daily collection job: fetch recent posts from every source and upsert them.
+"""Daily collection job: fetch recent posts from every source, upsert them,
+then tag new posts with tickers.
 
 Run once a day (cron/Task Scheduler):
     python -m jobs.collect_daily [--config config.yaml]
@@ -17,6 +18,7 @@ from datetime import timedelta
 
 from collectors.base import Collector
 from collectors.reddit import RedditCollector, utc_now
+from jobs import extract_tickers as extract_tickers_job
 from settings import load_config, setup_logging
 from storage import db
 
@@ -30,12 +32,14 @@ def build_collectors(cfg: dict) -> list[Collector]:
     return [RedditCollector.from_config(cfg["reddit"])]
 
 
-def run(cfg: dict, collectors: list[Collector] | None = None) -> int:
+def run(cfg: dict, collectors: list[Collector] | None = None,
+        extract_tickers: bool = True) -> int:
     since = utc_now() - timedelta(hours=cfg["collect"]["lookback_hours"])
     collectors = collectors if collectors is not None else build_collectors(cfg)
     con = db.connect(cfg["storage"]["db_path"])
     failures = 0  # collectors with any failure
     dead = 0      # collectors that produced nothing because everything failed
+    extraction_failed = False
     try:
         for collector in collectors:
             try:
@@ -56,12 +60,21 @@ def run(cfg: dict, collectors: list[Collector] | None = None) -> int:
                 log.exception("%s: collection failed", collector.source)
         total = con.execute("SELECT count(*) FROM posts").fetchone()[0]
         log.info("posts table now holds %d rows", total)
+        if extract_tickers:
+            try:
+                extract_tickers_job.extract(con, cfg)
+            except Exception:
+                # Collected posts are already saved; tagging can be rerun later.
+                log.exception("ticker extraction failed")
+                extraction_failed = True
     finally:
         con.close()
 
-    if failures == 0:
-        return EXIT_OK
-    return EXIT_FAILED if dead == len(collectors) else EXIT_PARTIAL
+    if dead == len(collectors):
+        return EXIT_FAILED
+    if failures or extraction_failed:
+        return EXIT_PARTIAL
+    return EXIT_OK
 
 
 def main(argv: list[str] | None = None) -> int:

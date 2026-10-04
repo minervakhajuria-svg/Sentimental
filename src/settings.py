@@ -45,5 +45,5 @@ def setup_logging(cfg: dict, job_name: str) -> None:
     root.handlers[:] = [file_handler, console]
     root.setLevel(log_cfg.get("level", "INFO"))
     # PRAW/urllib3 debug logs can include request headers; keep them quiet.
-    for noisy in ("prawcore", "praw", "urllib3"):
+    for noisy in ("prawcore", "praw", "urllib3", "httpx", "huggingface_hub", "yfinance"):
         logging.getLogger(noisy).setLevel(logging.WARNING)

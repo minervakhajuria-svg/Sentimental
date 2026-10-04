@@ -1,0 +1,134 @@
+# Fixture sentences for the ticker extractor.
+# `expect` maps ticker -> match_type. Every case must match exactly: missing
+# tickers are false negatives, extra ones are false positives.
+# Tests run against the universe in tests/test_extractor.py.
+
+# --- cashtags -------------------------------------------------------------
+- id: cashtag_basic
+  title: "$NVDA to the moon"
+  expect: {NVDA: cashtag}
+- id: cashtag_lowercase
+  title: "loaded up on $tsla calls"
+  expect: {TSLA: cashtag}
+- id: cashtag_possessive
+  title: "$AMD's guidance was weak"
+  expect: {AMD: cashtag}
+- id: cashtag_share_class
+  title: "Buffett adding to $BRK.B again"
+  expect: {BRK.B: cashtag}
+- id: cashtag_blocklisted_word_still_counts
+  title: "$ALL is my favourite insurer"
+  expect: {ALL: cashtag}
+- id: cashtag_not_in_universe
+  title: "$ZZZZ is a scam ticker"
+  expect: {}
+- id: dollar_amount_is_not_cashtag
+  title: "Paid $100 for 3 shares, now worth $12"
+  expect: {}
+- id: cashtag_beats_bare_for_same_ticker
+  title: "$PLTR earnings. PLTR guidance raised"
+  expect: {PLTR: cashtag}
+
+# --- aliases --------------------------------------------------------------
+- id: alias_basic
+  title: "Nvidia earnings beat again"
+  expect: {NVDA: alias}
+- id: alias_case_insensitive
+  title: "thoughts on tesla after delivery numbers?"
+  expect: {TSLA: alias}
+- id: alias_multiword
+  title: "Advanced Micro Devices is undervalued"
+  expect: {AMD: alias}
+- id: alias_possessive
+  title: "Microsoft's cloud growth slowed"
+  expect: {MSFT: alias}
+- id: alias_case_sensitive_lowercase_is_fruit
+  title: "ate an apple while watching the market crash"
+  expect: {}
+- id: alias_case_sensitive_capitalised
+  title: "Apple reports earnings Thursday"
+  expect: {AAPL: alias}
+- id: alias_and_cashtag_merge
+  title: "Nvidia and $AMD both ripping"
+  expect: {NVDA: alias, AMD: cashtag}
+- id: alias_inside_word_ignored
+  title: "Teslas everywhere in my town, hold my shares"
+  expect: {}
+- id: alias_with_ampersand
+  title: "AT&T dividend looks safe"
+  expect: {T: alias}
+
+# --- bare tickers ---------------------------------------------------------
+- id: bare_with_context
+  title: "Bought more PLTR shares today"
+  expect: {PLTR: bare}
+- id: bare_without_context_ignored
+  title: "PLTR"
+  body: "what do you all think about this"
+  expect: {}
+- id: bare_with_money_context
+  title: "HOOD at $8 is a steal"
+  expect: {HOOD: bare}
+- id: uppercase_alias_beats_bare
+  title: "SOFI at $8 is a steal"
+  expect: {SOFI: alias}
+- id: bare_ticker_list_not_shouting
+  title: "My portfolio: NVDA AMD MSFT GOOGL"
+  expect: {NVDA: bare, AMD: bare, MSFT: bare, GOOGL: bare}
+- id: bare_share_class
+  title: "BRK.B is my biggest position"
+  expect: {BRK.B: bare}
+- id: bare_single_letter_ignored
+  title: "F and T both pay a dividend, buying more"
+  expect: {}
+
+# --- false-positive traps -------------------------------------------------
+- id: blocklist_common_words
+  title: "I think IT is going UP, ALL IN on calls NOW"
+  expect: {}
+- id: blocklist_single_word
+  title: "Is IT a buy at this price?"
+  expect: {}
+- id: blocklist_jargon
+  title: "DD: why the CEO thinks the IPO is undervalued, IMO buy the stock"
+  expect: {}
+- id: shouting_line
+  title: "THIS STOCK IS GOING TO THE MOON BABY"
+  expect: {}
+- id: shouting_line_hides_bare_but_not_cashtag
+  title: "THIS IS THE BEST STOCK EVER $GME"
+  expect: {GME: cashtag}
+- id: shouting_only_affects_its_own_line
+  title: "WHAT A DAY FOR THE MARKET"
+  body: "Holding AMD shares through earnings"
+  expect: {AMD: bare}
+- id: lowercase_word_not_ticker
+  title: "now is the time to buy, all in on shares"
+  expect: {}
+- id: subreddit_reference_ignored
+  title: "Crossposted from r/AMD, buying the dip"
+  expect: {}
+- id: url_ignored
+  title: "Stock chart here"
+  body: "https://finance.yahoo.com/quote/TSLA/ looks bad"
+  expect: {}
+- id: not_in_universe_bare
+  title: "Bought XYZQ shares"
+  expect: {}
+- id: ticker_inside_word_ignored
+  title: "NVDAX is not a real ticker, buy shares"
+  expect: {}
+
+# --- realistic posts -----------------------------------------------------
+- id: wsb_style
+  title: "GME YOLO update: down 40% but still holding"
+  body: "Also have some $AMC. Not selling."
+  expect: {GME: bare, AMC: cashtag}
+- id: comparison_post
+  title: "Microsoft vs Google for long-term holding?"
+  body: "Thinking about MSFT and GOOGL for my Roth"
+  expect: {MSFT: alias, GOOGL: alias}
+- id: no_tickers
+  title: "What's everyone's strategy for a recession?"
+  body: "Thinking of moving to cash and bonds."
+  expect: {}

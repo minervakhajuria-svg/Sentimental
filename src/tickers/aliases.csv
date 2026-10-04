@@ -1,0 +1,113 @@
+alias,ticker,case_sensitive
+Nvidia,NVDA,0
+Tesla,TSLA,0
+Apple,AAPL,1
+Microsoft,MSFT,0
+Amazon,AMZN,1
+Alphabet,GOOGL,1
+Google,GOOGL,0
+Meta Platforms,META,0
+Facebook,META,0
+Netflix,NFLX,0
+Advanced Micro Devices,AMD,0
+Intel,INTC,1
+Broadcom,AVGO,0
+Qualcomm,QCOM,0
+Micron,MU,0
+Taiwan Semiconductor,TSM,0
+TSMC,TSM,0
+ASML,ASML,0
+Arm Holdings,ARM,0
+Super Micro,SMCI,0
+Supermicro,SMCI,0
+Palantir,PLTR,0
+Salesforce,CRM,0
+Oracle,ORCL,1
+Adobe,ADBE,0
+ServiceNow,NOW,0
+Snowflake,SNOW,0
+CrowdStrike,CRWD,0
+Palo Alto Networks,PANW,0
+Shopify,SHOP,0
+Coinbase,COIN,0
+Robinhood,HOOD,0
+SoFi,SOFI,0
+PayPal,PYPL,0
+MicroStrategy,MSTR,0
+Berkshire Hathaway,BRK.B,0
+Berkshire,BRK.B,0
+JPMorgan,JPM,0
+JP Morgan,JPM,0
+Goldman Sachs,GS,0
+Morgan Stanley,MS,0
+Bank of America,BAC,0
+Wells Fargo,WFC,0
+Citigroup,C,0
+Visa,V,1
+Mastercard,MA,0
+American Express,AXP,0
+Walmart,WMT,0
+Costco,COST,0
+Home Depot,HD,0
+McDonald's,MCD,0
+McDonalds,MCD,0
+Starbucks,SBUX,0
+Chipotle,CMG,0
+Nike,NKE,1
+Coca-Cola,KO,0
+Coca Cola,KO,0
+PepsiCo,PEP,0
+Pepsi,PEP,0
+Procter & Gamble,PG,0
+Disney,DIS,0
+Comcast,CMCSA,0
+Warner Bros,WBD,0
+Spotify,SPOT,0
+Uber,UBER,1
+Lyft,LYFT,0
+Airbnb,ABNB,0
+DoorDash,DASH,0
+Boeing,BA,0
+Lockheed Martin,LMT,0
+Lockheed,LMT,0
+Raytheon,RTX,0
+General Electric,GE,0
+Caterpillar,CAT,0
+Deere,DE,1
+Ford,F,1
+General Motors,GM,0
+Rivian,RIVN,0
+Lucid,LCID,1
+NIO,NIO,1
+Exxon,XOM,0
+ExxonMobil,XOM,0
+Chevron,CVX,0
+Occidental,OXY,0
+Pfizer,PFE,0
+Moderna,MRNA,0
+Johnson & Johnson,JNJ,0
+Eli Lilly,LLY,0
+Novo Nordisk,NVO,0
+UnitedHealth,UNH,0
+AbbVie,ABBV,0
+Merck,MRK,0
+GameStop,GME,0
+AMC Entertainment,AMC,0
+BlackBerry,BB,0
+AT&T,T,0
+Verizon,VZ,0
+T-Mobile,TMUS,0
+Alibaba,BABA,0
+Baidu,BIDU,0
+Rocket Lab,RKLB,0
+IonQ,IONQ,0
+Carvana,CVNA,0
+Peloton,PTON,0
+Zoom Video,ZM,0
+Snapchat,SNAP,0
+Pinterest,PINS,0
+Reddit Inc,RDDT,0
+Dell,DELL,1
+Hewlett Packard Enterprise,HPE,0
+IBM,IBM,0
+Cisco,CSCO,0

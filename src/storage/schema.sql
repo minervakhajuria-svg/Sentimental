@@ -20,7 +20,7 @@ CREATE TABLE IF NOT EXISTS posts (
 CREATE TABLE IF NOT EXISTS post_tickers (
     post_id    TEXT NOT NULL,
     ticker     TEXT NOT NULL,
-    match_type TEXT NOT NULL,              -- cashtag | alias | name
+    match_type TEXT NOT NULL,              -- cashtag | alias | bare
     confidence DOUBLE,
     PRIMARY KEY (post_id, ticker)
 );

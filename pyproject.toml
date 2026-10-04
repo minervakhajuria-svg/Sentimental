@@ -8,6 +8,8 @@ dependencies = [
     "duckdb>=1.0",
     "pyyaml>=6.0",
     "python-dotenv>=1.0",
+    "yfinance>=0.2.50",
+    "pandas>=2.0",
 ]
 
 [project.optional-dependencies]
@@ -22,6 +24,7 @@ where = ["src"]
 
 [tool.setuptools.package-data]
 storage = ["schema.sql"]
+tickers = ["aliases.csv", "blocklist.txt"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
