@@ -42,15 +42,15 @@ def count_posts(cfg):
 
 
 def test_daily_run_is_idempotent(cfg, reddit_fixture, fixed_now):
-    assert collect_daily.run(cfg, [collector(reddit_fixture, fixed_now)], extract_tickers=False, collect_prices=False) == 0
+    assert collect_daily.run(cfg, [collector(reddit_fixture, fixed_now)], extract_tickers=False, collect_prices=False, collect_filings=False) == 0
     assert count_posts(cfg) == 5
-    assert collect_daily.run(cfg, [collector(reddit_fixture, fixed_now)], extract_tickers=False, collect_prices=False) == 0
+    assert collect_daily.run(cfg, [collector(reddit_fixture, fixed_now)], extract_tickers=False, collect_prices=False, collect_filings=False) == 0
     assert count_posts(cfg) == 5
 
 
 def test_partial_failure_saves_what_it_got(cfg, reddit_fixture, fixed_now):
     err = prawcore.exceptions.Forbidden(SimpleNamespace(status_code=403))
-    code = collect_daily.run(cfg, [collector(reddit_fixture, fixed_now, {"stocks": [err]})], extract_tickers=False, collect_prices=False)
+    code = collect_daily.run(cfg, [collector(reddit_fixture, fixed_now, {"stocks": [err]})], extract_tickers=False, collect_prices=False, collect_filings=False)
     assert code == collect_daily.EXIT_PARTIAL
     assert count_posts(cfg) == 3
 
@@ -59,13 +59,13 @@ def test_total_failure_exits_nonzero(cfg, reddit_fixture, fixed_now):
     def forbidden():
         return prawcore.exceptions.Forbidden(SimpleNamespace(status_code=403))
     errors = {"wallstreetbets": [forbidden()], "stocks": [forbidden()]}
-    code = collect_daily.run(cfg, [collector(reddit_fixture, fixed_now, errors)], extract_tickers=False, collect_prices=False)
+    code = collect_daily.run(cfg, [collector(reddit_fixture, fixed_now, errors)], extract_tickers=False, collect_prices=False, collect_filings=False)
     assert code == collect_daily.EXIT_FAILED
     assert count_posts(cfg) == 0
 
 
 def test_crashing_collector_does_not_touch_existing_data(cfg, reddit_fixture, fixed_now):
-    collect_daily.run(cfg, [collector(reddit_fixture, fixed_now)], extract_tickers=False, collect_prices=False)
+    collect_daily.run(cfg, [collector(reddit_fixture, fixed_now)], extract_tickers=False, collect_prices=False, collect_filings=False)
 
     class Boom:
         source = "boom"
@@ -73,7 +73,7 @@ def test_crashing_collector_does_not_touch_existing_data(cfg, reddit_fixture, fi
             yield from []
             raise RuntimeError("network down")
 
-    assert collect_daily.run(cfg, [Boom()], extract_tickers=False, collect_prices=False) == collect_daily.EXIT_FAILED
+    assert collect_daily.run(cfg, [Boom()], extract_tickers=False, collect_prices=False, collect_filings=False) == collect_daily.EXIT_FAILED
     assert count_posts(cfg) == 5
 
 
@@ -95,7 +95,7 @@ def test_daily_run_tags_tickers(cfg, reddit_fixture, fixed_now):
     con.close()
 
     assert collect_daily.run(cfg, [collector(reddit_fixture, fixed_now)],
-                             collect_prices=False) == 0
+                             collect_prices=False, collect_filings=False) == 0
     with duckdb.connect(cfg["storage"]["db_path"]) as con:
         tagged = set(con.execute("SELECT post_id, ticker FROM post_tickers").fetchall())
     assert ("reddit:1aaa01", "NVDA") in tagged
@@ -107,7 +107,7 @@ def test_extraction_failure_is_partial_but_keeps_posts(cfg, reddit_fixture, fixe
     cfg["extraction"] = {}
     # No universe saved -> extraction raises; collection must still be kept.
     assert collect_daily.run(cfg, [collector(reddit_fixture, fixed_now)],
-                             collect_prices=False) == collect_daily.EXIT_PARTIAL
+                             collect_prices=False, collect_filings=False) == collect_daily.EXIT_PARTIAL
     assert count_posts(cfg) == 5
 
 
@@ -144,7 +144,7 @@ def test_one_source_missing_credentials_does_not_stop_others(cfg, monkeypatch):
     ], min_coverage=0.5)
     con.close()
 
-    code = collect_daily.run(cfg, collect_prices=False)
+    code = collect_daily.run(cfg, collect_prices=False, collect_filings=False)
     assert code == collect_daily.EXIT_PARTIAL  # reddit couldn't start
     with duckdb.connect(cfg["storage"]["db_path"]) as con:
         rows = con.execute("SELECT post_id, ticker, match_type FROM post_tickers "

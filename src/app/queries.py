@@ -18,7 +18,7 @@ from storage import db
 DISPLAY_COLUMNS = [
     "ticker", "company_name", "composite", "mentions", "attention_z", "sentiment",
     "momentum", "breadth", "ret_5d", "ret_30d", "rel_volume", "early_chatter_flag",
-    "insider_buy_flag",
+    "insider_buy_flag", "events", "red_flag",
 ]
 
 
@@ -176,7 +176,7 @@ def week_summary(con: duckdb.DuckDBPyConnection, ticker: str, week: Week, model:
     ).fetchone()
     summary = dict(zip(["posts", "mean_score", "pos", "neu", "neg"], row))
     cols = ["sentiment", "momentum", "ret_5d", "ret_30d", "rel_volume", "updown_vol_ratio",
-            "early_chatter_flag", "insider_buy_flag"]
+            "early_chatter_flag", "insider_buy_flag", "events", "red_flag"]
     signal = con.execute(
         f"SELECT {', '.join(cols)} FROM weekly_signals WHERE week_start = ? AND ticker = ?",
         [week.week_start, ticker],
@@ -213,3 +213,9 @@ def daily_prices(con: duckdb.DuckDBPyConnection, ticker: str, end: datetime,
            ORDER BY date""",
         [ticker, end - timedelta(days=days), end],
     ).df()
+
+
+def week_filings(con: duckdb.DuckDBPyConnection, ticker: str, week: Week) -> pd.DataFrame:
+    """The ticker's 8-Ks accepted during the week."""
+    from market.sec_filings import filings_between
+    return filings_between(con, ticker, week.start, week.end)

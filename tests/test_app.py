@@ -168,3 +168,20 @@ def test_validation_page_renders(demo, monkeypatch):
     assert "Does chatter lead price?" in md
     assert "/ 12 weeks" in md and "noise" in md  # demo has 8 weeks: flagged as too little data
     assert "Bull list hit rate" in md
+
+
+def test_sec_events_show_in_app(con, demo, monkeypatch):
+    week = demo[1][-1]
+    bull, bear = queries.ranked_tables(con, week.week_start, top_n=20)
+    assert bear.set_index("ticker").loc["INTC", "red_flag"]
+    assert "Earnings" in bull.set_index("ticker").loc["NVDA", "events"]
+
+    monkeypatch.setenv("SENTIMENT_DB_PATH", str(demo[0]))
+    at = AppTest.from_file(str(APP), default_timeout=60).run()
+    assert "Red-flag filings" in _markdown(at)
+
+    at = AppTest.from_function(_drilldown_script, default_timeout=60)
+    at.session_state["ticker"] = "INTC"
+    at.run()
+    md = _markdown(at)
+    assert "RED-FLAG 8-K" in md and "Restructuring or exit costs" in md

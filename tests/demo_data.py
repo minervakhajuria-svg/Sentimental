@@ -136,6 +136,14 @@ def build(path: Path, seed: int = 7) -> list[Week]:
                 label = "pos" if score > 0.2 else "neg" if score < -0.2 else "neu"
                 scores.append((pid, ticker, "finbert", label, round(score, 3), datetime(2026, 10, 3)))
     db.upsert_prices(con, _prices(rng, last))
+    # Invented 8-Ks in the final week: NVDA reports earnings; INTC files a
+    # restructuring (a red-flag item).
+    for acc, ticker, items, day in (("0000000099-26-000001", "NVDA", "2.02,9.01", 3),
+                                    ("0000000099-26-000002", "INTC", "2.05,9.01", 4)):
+        when = last.start + timedelta(days=day, hours=20, minutes=30)
+        con.execute("INSERT INTO sec_filings VALUES (?, ?, 99, '8-K', ?, ?, ?, ?, ?)",
+                    [acc, ticker, when.date(), when, items,
+                     f"https://www.sec.gov/Archives/edgar/data/99/{acc.replace('-', '')}/{acc}-index.htm", when])
     db.upsert_posts(con, posts)
     db.replace_post_tickers(con, tags)
     db.insert_scores(con, scores)

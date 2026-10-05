@@ -15,7 +15,7 @@ from signals.aggregate import Week
 SIGNAL_COLUMNS = [
     "week_start", "ticker", "mentions", "attention_z", "sentiment", "sentiment_prev",
     "momentum", "breadth", "composite_bull", "composite_bear", "ret_5d", "ret_30d",
-    "rel_volume", "updown_vol_ratio", "insider_buy_flag", "early_chatter_flag",
+    "rel_volume", "updown_vol_ratio", "insider_buy_flag", "early_chatter_flag", "events", "red_flag",
 ]
 
 
@@ -61,9 +61,11 @@ def write_signals(con: duckdb.DuckDBPyConnection, week: Week, signals: pd.DataFr
                   "rel_volume", "updown_vol_ratio"):
             v = r.get(c)
             rec[c] = None if v is None or pd.isna(v) else (int(v) if c == "mentions" else float(v))
-        for c in ("insider_buy_flag", "early_chatter_flag"):
+        for c in ("insider_buy_flag", "early_chatter_flag", "red_flag"):
             v = r.get(c)
             rec[c] = None if v is None or pd.isna(v) else bool(v)
+        v = r.get("events")
+        rec["events"] = v if isinstance(v, str) and v else None
         rows.append([rec[c] for c in SIGNAL_COLUMNS])
     con.execute("BEGIN TRANSACTION")
     try:
@@ -89,7 +91,8 @@ def ranked_lists(con: duckdb.DuckDBPyConnection, week_start, top_n: int) -> tupl
     """
     q = """
         SELECT ticker, composite_{side} AS composite, mentions, attention_z, sentiment,
-               momentum, breadth, ret_5d, ret_30d, rel_volume, early_chatter_flag, insider_buy_flag
+               momentum, breadth, ret_5d, ret_30d, rel_volume, early_chatter_flag, insider_buy_flag,
+               events, red_flag
         FROM weekly_signals
         WHERE week_start = ? AND attention_z > 0 AND sentiment {cmp} 0
         ORDER BY composite_{side} DESC

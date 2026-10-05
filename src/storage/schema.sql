@@ -84,3 +84,21 @@ CREATE TABLE IF NOT EXISTS insider_filings (
     purchase_value DOUBLE,           -- shares * price, USD
     fetched_at     TIMESTAMP
 );
+
+-- SEC 8-K filings (event context; never a ranking input).
+CREATE TABLE IF NOT EXISTS sec_filings (
+    accession   TEXT PRIMARY KEY,
+    ticker      TEXT NOT NULL,
+    cik         INTEGER,
+    form        TEXT NOT NULL,           -- 8-K or 8-K/A
+    filing_date DATE NOT NULL,
+    accepted_at TIMESTAMP,               -- SEC acceptance time, UTC
+    items       TEXT,                    -- e.g. "2.02,9.01"
+    url         TEXT,                    -- EDGAR filing index page
+    fetched_at  TIMESTAMP
+);
+
+-- Columns added after the first release. ADD COLUMN IF NOT EXISTS keeps
+-- existing databases working without a manual migration.
+ALTER TABLE weekly_signals ADD COLUMN IF NOT EXISTS events TEXT;      -- 8-K categories that week
+ALTER TABLE weekly_signals ADD COLUMN IF NOT EXISTS red_flag BOOLEAN; -- a red-flag 8-K that week

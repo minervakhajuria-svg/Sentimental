@@ -176,6 +176,12 @@ context:
     min_rel_volume: 1.2
     min_price_drop: 0.02     # 5-day fall bigger than this counts as "falling"
 
+sec:
+  enabled: true              # needs SEC_USER_AGENT in .env; 8-K events + Form 4 trades, daily
+  max_tickers: 1000          # same ticker list as news
+  lookback_days: 10          # overlap so a missed day is filled in
+  pause_seconds: 0.12        # SEC fair access: under 10 requests/second
+
 insiders:
   enabled: true              # needs SEC_USER_AGENT in .env; otherwise the flag stays blank
   lookback_days: 30          # purchases filed within this window up to the week's Friday

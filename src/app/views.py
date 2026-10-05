@@ -96,6 +96,12 @@ RANK_COLUMNS = {
         help="Top-decile composite while price hasn't moved yet and volume is rising"),
     "insider_buy_flag": st.column_config.CheckboxColumn("Insider buy",
         help="An insider filed an open-market purchase (SEC Form 4) in the last 30 days"),
+    "events": st.column_config.TextColumn("8-K events",
+        help="What the company officially disclosed this week (SEC 8-K). An attention spike in an "
+             "earnings week is scheduled, not news."),
+    "red_flag": st.column_config.CheckboxColumn("Red flag",
+        help="An 8-K this week with a warning-sign item: restatement, delisting notice, auditor "
+             "change, bankruptcy, impairment, debt default or cyber incident"),
 }
 
 
@@ -162,6 +168,13 @@ def rankings() -> None:
             html(theme.divergence_list(warnings))
 
     ranked_table("Heating up · bearish", theme.RED, bear, "bear")
+
+    flagged = pd.concat([bull, bear])
+    flagged = flagged[flagged["red_flag"].fillna(False).astype(bool)] if not flagged.empty else flagged
+    if not flagged.empty:
+        with st.container(key="card-redflags"):
+            html(theme.label("Red-flag filings · SEC 8-K", dot=theme.RED))
+            html(theme.red_flag_list(flagged.drop_duplicates("ticker")))
     if bull["ret_5d"].isna().all() and bear["ret_5d"].isna().all():
         html('<div class="sm-muted">No price data for this week yet: run '
              '<code>python -m jobs.collect_prices</code> or re-run the ranking.</div>')
@@ -229,6 +242,7 @@ def drilldown() -> None:
             summary = queries.week_summary(con, ticker, week, MODEL)
             communities = queries.community_breakdown(con, ticker, week, MODEL)
             posts = queries.top_posts(con, ticker, week, MODEL)
+            filings = queries.week_filings(con, ticker, week)
 
     html(theme.label(f"Sentiment · {week_label(week_start)}" if week else "Sentiment"))
     html(theme.title(name or ticker, ticker if name else None))
@@ -238,6 +252,10 @@ def drilldown() -> None:
             badges.append(theme.badge("EARLY CHATTER"))
         if summary.get("insider_buy_flag"):
             badges.append(theme.badge("INSIDER BUY (FORM 4)", theme.TEXT))
+        if "Earnings" in (summary.get("events") or ""):
+            badges.append(theme.badge("EARNINGS WEEK", theme.MUTED))
+        if summary.get("red_flag"):
+            badges.append(theme.badge("RED-FLAG 8-K", theme.RED))
         if divergence_warning({**summary, "sentiment": summary["ranked_sentiment"] or 0}, CONTEXT_CFG):
             badges.append(theme.badge("DIVERGENCE: VOLUME UP, PRICE DOWN", theme.RED))
         if badges:
@@ -288,6 +306,11 @@ def drilldown() -> None:
                 "composite_bull": st.column_config.NumberColumn("Bull composite", format="%.2f"),
                 "composite_bear": st.column_config.NumberColumn("Bear composite", format="%.2f"),
             })
+
+    if week and not filings.empty:
+        with st.container(key="card-filings"):
+            html(theme.label(f"SEC filings · {week_label(week_start)}"))
+            html(theme.filings_list(filings))
 
     if week:
         with st.container(key="card-posts"):

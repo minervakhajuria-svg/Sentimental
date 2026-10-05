@@ -56,6 +56,7 @@ class EdgarClient:
         self.pause_seconds = pause_seconds
         self._sleep = sleep
         self._ciks: dict[str, int] | None = None
+        self._subs: dict[int, dict] = {}
 
     @classmethod
     def from_env(cls, cfg: dict) -> "EdgarClient":
@@ -76,17 +77,44 @@ class EdgarClient:
             self._ciks = {row["ticker"].upper().replace("-", "."): int(row["cik_str"]) for row in data.values()}
         return self._ciks.get(ticker.upper())
 
-    def form4_filings(self, cik: int, since: date, until: date) -> list[dict]:
-        recent = self._json(SUBMISSIONS_URL.format(cik=cik)).get("filings", {}).get("recent", {})
+    def submissions(self, cik: int) -> dict:
+        """A company's recent-filings list, fetched once per run and shared by
+        the insider flag (Form 4) and event context (8-K)."""
+        if cik not in self._subs:
+            self._subs[cik] = self._json(SUBMISSIONS_URL.format(cik=cik)).get("filings", {}).get("recent", {})
+        return self._subs[cik]
+
+    def filings(self, cik: int, forms: set[str], since: date, until: date) -> list[dict]:
+        """Filings of the given form types with filing date in [since, until]."""
+        recent = self.submissions(cik)
+        n = len(recent.get("form", []))
+        col = lambda name: recent.get(name) or [""] * n  # noqa: E731  (older payloads lack some fields)
         out = []
-        for form, acc, filed, doc in zip(recent.get("form", []), recent.get("accessionNumber", []),
-                                         recent.get("filingDate", []), recent.get("primaryDocument", [])):
+        for form, acc, filed, doc, items, accepted in zip(
+                col("form"), col("accessionNumber"), col("filingDate"), col("primaryDocument"),
+                col("items"), col("acceptanceDateTime")):
+            if form not in forms or not filed:
+                continue
             filed_on = date.fromisoformat(filed)
-            if form == "4" and since <= filed_on <= until:
-                out.append({"accession": acc, "filing_date": filed_on,
-                            "url": ARCHIVE_URL.format(cik=cik, acc=acc.replace("-", ""),
-                                                      doc=_XSL_PREFIX.sub("", doc))})
+            if not since <= filed_on <= until:
+                continue
+            nodash = acc.replace("-", "")
+            out.append({
+                "accession": acc,
+                "form": form,
+                "filing_date": filed_on,
+                # Exact UTC time the SEC accepted it: used to keep after-hours
+                # Friday filings out of a ranking cut off at Saturday 00:00 UTC.
+                "accepted_at": (datetime.fromisoformat(accepted.replace("Z", "+00:00"))
+                                .astimezone(timezone.utc).replace(tzinfo=None) if accepted else None),
+                "items": items or "",
+                "url": ARCHIVE_URL.format(cik=cik, acc=nodash, doc=_XSL_PREFIX.sub("", doc)),
+                "index_url": f"https://www.sec.gov/Archives/edgar/data/{cik}/{nodash}/{acc}-index.htm",
+            })
         return out
+
+    def form4_filings(self, cik: int, since: date, until: date) -> list[dict]:
+        return self.filings(cik, {"4"}, since, until)
 
     def form4_xml(self, url: str) -> str:
         self._sleep(self.pause_seconds)

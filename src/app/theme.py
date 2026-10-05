@@ -325,3 +325,33 @@ def fmt_signed(v) -> str:
 
 def fmt_rate(v) -> str:
     return "–" if v is None or pd.isna(v) else f"{v:.0%}"
+
+
+def filings_list(df: pd.DataFrame) -> str:
+    """8-K rows: when, what (item names), link to EDGAR. Red-flag items in red."""
+    from market.sec_filings import RED_FLAG_ITEMS, describe, split_items
+
+    rows = []
+    for r in df.itertuples():
+        when = pd.Timestamp(r.accepted_at).strftime("%d %b %H:%M")
+        red = bool(set(split_items(r.items)) & RED_FLAG_ITEMS)
+        what = escape("; ".join(describe(r.items)) or "Exhibits only")
+        link = escape(r.url or "#", quote=True)
+        style = f' style="color:{RED}"' if red else ""
+        rows.append(
+            f'<div class="sm-post"><div class="src">{escape(r.form)}<br>{when} UTC</div>'
+            f'<div class="txt"><a href="{link}" target="_blank" rel="noopener noreferrer"{style}>{what}</a>'
+            f'<div class="meta">items {escape(r.items or "-")}</div></div>'
+            f'<div class="tone" style="color:{RED if red else MUTED}">{"RED FLAG" if red else ""}</div></div>'
+        )
+    return f'<div class="sm-posts">{"".join(rows)}</div>'
+
+
+def red_flag_list(df: pd.DataFrame) -> str:
+    rows = "".join(
+        f'<div class="sm-warn"><div class="sym">{escape(r.ticker)}</div>'
+        f'<div class="why">{escape((r.events or "").split("Red flag: ")[-1])}. Filed in an 8-K this week; '
+        f'read the filing before trusting the coverage.</div></div>'
+        for r in df.itertuples()
+    )
+    return f"<div>{rows}</div>"

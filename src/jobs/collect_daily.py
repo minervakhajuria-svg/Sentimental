@@ -1,5 +1,5 @@
 """Daily collection job: fetch recent posts from every source, upsert them,
-tag new posts with tickers, then refresh recent daily prices.
+tag new posts with tickers, fetch SEC filings, then refresh recent daily prices.
 
 Run once a day (cron/Task Scheduler):
     python -m jobs.collect_daily [--config config.yaml]
@@ -23,8 +23,10 @@ from collectors.base import Collector
 from collectors.news import FinnhubNewsCollector
 from collectors.reddit import RedditCollector, utc_now
 from collectors.stocktwits import StockTwitsCollector
+from jobs import collect_filings as collect_filings_job
 from jobs import collect_prices as collect_prices_job
 from jobs import extract_tickers as extract_tickers_job
+from market.insiders import EdgarClient
 from market.prices import MarketDataProvider
 from settings import load_config, setup_logging
 from storage import db
@@ -77,7 +79,7 @@ def build_collectors(cfg: dict, con: duckdb.DuckDBPyConnection) -> tuple[list[Co
 
 def run(cfg: dict, collectors: list[Collector] | None = None,
         extract_tickers: bool = True, price_provider: MarketDataProvider | None = None,
-        collect_prices: bool = True) -> int:
+        collect_prices: bool = True, collect_filings: bool = True) -> int:
     since = utc_now() - timedelta(hours=cfg["collect"]["lookback_hours"])
     con = db.connect(cfg["storage"]["db_path"])
     not_started = 0
@@ -122,6 +124,20 @@ def run(cfg: dict, collectors: list[Collector] | None = None,
                 # Collected posts are already saved; tagging can be rerun later.
                 log.exception("ticker extraction failed")
                 followup_failed = True
+        if collect_filings and cfg.get("sec", {}).get("enabled"):
+            try:
+                edgar = EdgarClient.from_env(cfg["sec"])
+            except RuntimeError as e:
+                log.warning("sec filings off: %s", e)  # optional context: not a failure
+            else:
+                try:
+                    today = utc_now().date()
+                    collect_filings_job.collect_filings(
+                        con, edgar, ticker_list(con, cfg, cfg["sec"]["max_tickers"])(),
+                        today - timedelta(days=cfg["sec"]["lookback_days"]), today)
+                except Exception:
+                    log.exception("sec filings failed")
+                    followup_failed = True
         if collect_prices:
             try:
                 provider = price_provider or collect_prices_job.provider_from_config(cfg)

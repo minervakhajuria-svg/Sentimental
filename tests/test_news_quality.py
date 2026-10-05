@@ -93,6 +93,6 @@ def test_failure_tolerance(tmp_path, monkeypatch):
             return []
 
     cfg = {"storage": {"db_path": str(tmp_path / "t.duckdb")}, "collect": {"lookback_hours": 36}}
-    assert collect_daily.run(cfg, [Collector()], extract_tickers=False, collect_prices=False) == 0
+    assert collect_daily.run(cfg, [Collector()], extract_tickers=False, collect_prices=False, collect_filings=False) == 0
     Collector.failed_communities = [f"T{i}" for i in range(10)]   # 10% > 5%
-    assert collect_daily.run(cfg, [Collector()], extract_tickers=False, collect_prices=False) == 2
+    assert collect_daily.run(cfg, [Collector()], extract_tickers=False, collect_prices=False, collect_filings=False) == 2

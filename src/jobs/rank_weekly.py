@@ -21,6 +21,7 @@ from jobs.collect_prices import provider_from_config, update_prices
 from jobs.score_posts import score_pending
 from market.context import add_context
 from market.insiders import EdgarClient, insider_buy_flags, update_insider_cache
+from market.sec_filings import week_events
 from market.prices import MarketDataProvider
 from scoring.finbert import Scorer
 from scoring.llm_second_pass import ClaudeScorer, second_pass
@@ -75,6 +76,7 @@ def rank(con: duckdb.DuckDBPyConnection, cfg: dict, week: Week,
     prices = db.load_prices(con, tickers, start, week.friday)
     signals = add_context(signals, prices, week, cfg["context"])
     signals = add_insider_flags(con, signals, week, cfg.get("insiders", {}), edgar)
+    signals = add_events(con, signals, week)
     log.info("context: price data for %d/%d tickers, %d early-chatter flags",
              prices["ticker"].nunique() if len(prices) else 0, len(tickers),
              int(signals["early_chatter_flag"].sum()) if len(signals) else 0)
@@ -98,6 +100,17 @@ def add_insider_flags(con, signals: pd.DataFrame, week: Week, icfg: dict,
         return signals  # nothing fetched and nothing cached: leave the flag NULL
     flags = insider_buy_flags(con, tickers, week.friday, icfg["lookback_days"])
     return signals.assign(insider_buy_flag=[flags[t] for t in tickers])
+
+
+def add_events(con, signals: pd.DataFrame, week: Week) -> pd.DataFrame:
+    """8-K event categories and red flag per ticker for the week (NULL with no SEC data)."""
+    if signals.empty or not con.execute("SELECT count(*) FROM sec_filings").fetchone()[0]:
+        return signals
+    found = week_events(con, list(signals.index), week.start, week.end)
+    return signals.assign(
+        events=[found[t][0] if t in found else None for t in signals.index],
+        red_flag=[found[t][1] if t in found else False for t in signals.index],
+    )
 
 
 def format_list(title: str, df: pd.DataFrame) -> str:
