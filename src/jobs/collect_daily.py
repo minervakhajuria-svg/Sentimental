@@ -98,10 +98,16 @@ def run(cfg: dict, collectors: list[Collector] | None = None,
                 log.info("%s: %d fetched, %d new, %d updated, %d source tickers, %d source tags",
                          collector.source, len(posts), inserted, updated, tagged, tags)
                 failed = getattr(collector, "failed_communities", [])
-                if failed:
+                total = len(getattr(collector, "communities", failed)) or 1
+                tolerated = len(failed) / total <= getattr(collector, "failure_tolerance", 0.0)
+                if failed and tolerated:
+                    # e.g. a handful of 1,000 news tickers timing out: normal, not a failure.
+                    log.warning("%s: %d of %d failed (within tolerance): %s", collector.source,
+                                len(failed), total, ", ".join(failed[:20]))
+                elif failed:
                     failures += 1
                     log.error("%s: failed communities: %s", collector.source, ", ".join(failed))
-                    if len(failed) == len(getattr(collector, "communities", failed)):
+                    if len(failed) == total:
                         dead += 1
             except Exception:
                 failures += 1

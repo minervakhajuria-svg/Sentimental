@@ -17,6 +17,8 @@ import numpy as np
 import pandas as pd
 
 from storage import db
+from signals.news_quality import name_keys
+from tickers.extractor import load_aliases
 from signals.filters import apply_noise_filters, cap_per_author
 
 
@@ -79,6 +81,17 @@ def _weighted_mean(values: pd.Series, weights: pd.Series) -> float:
     return float(np.average(v, weights=w)) if w.sum() > 0 else float(v.mean())
 
 
+def ticker_name_keys(con: duckdb.DuckDBPyConnection, tickers) -> dict[str, list[str]]:
+    """Name forms per ticker (company name + curated aliases) for the off-topic check."""
+    names = dict(con.execute(
+        "SELECT ticker, company_name FROM ticker_universe WHERE ticker IN (SELECT unnest(?))",
+        [list(tickers)]).fetchall())
+    aliases: dict[str, list[str]] = {}
+    for alias, ticker, _ in load_aliases():
+        aliases.setdefault(ticker, []).append(alias)
+    return {t: name_keys(names.get(t), aliases.get(t, [])) for t in tickers}
+
+
 def compute_components(con: duckdb.DuckDBPyConnection, week: Week, cfg: dict) -> pd.DataFrame:
     """Per-ticker components for `week`, before eligibility filtering.
 
@@ -95,8 +108,9 @@ def compute_components(con: duckdb.DuckDBPyConnection, week: Week, cfg: dict) ->
     age = week.end - pd.to_datetime(df["created_at"])
     df["day"] = (age // pd.Timedelta(days=1)).astype(int)  # 0..6 = this week
     df["block"] = df["day"] // 7  # 7-day blocks counting back: 0 = this week, 1 = last week
-    df = apply_noise_filters(df, cfg)
-    df = cap_per_author(df, cfg["author_cap_per_ticker_week"], period_col="block")
+    df = apply_noise_filters(df, cfg, ticker_name_keys(con, df["ticker"].unique()))
+    df = cap_per_author(df, cfg["author_cap_per_ticker_week"], period_col="block",
+                        sources=cfg.get("author_cap_sources"))
 
     tickers = sorted(df.loc[df["block"] == 0, "ticker"].unique())
     if not tickers:

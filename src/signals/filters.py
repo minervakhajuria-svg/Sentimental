@@ -4,8 +4,10 @@ Order matters and is applied in signals.aggregate:
   1. drop_reposts         exact duplicates (same content hash), keep earliest
   2. drop_near_duplicates fuzzy reposts (SimHash), keep earliest
   3. drop_spam            configured spam patterns (Discord/Telegram pumps, "DM me")
-  4. add_post_weight      log(1 + engagement) * author_weight * source_weight
-  5. cap_per_author       at most K posts per author per ticker per week
+  4. news quality         syndicated copies collapsed; price recaps dropped; promos,
+                          press releases and off-topic tags down-weighted
+  5. add_post_weight      log(1 + engagement) * author_weight * quality * source_weight
+  6. cap_per_author       at most K posts per author per ticker per week (social sources)
 
 All thresholds live in config.yaml under signals.noise.
 """
@@ -15,6 +17,8 @@ from __future__ import annotations
 import hashlib
 import re
 from collections import defaultdict
+
+from signals.news_quality import classify, is_about
 
 import numpy as np
 import pandas as pd
@@ -121,8 +125,42 @@ def author_weights(df: pd.DataFrame, noise: dict) -> pd.Series:
     return w
 
 
+_HEADLINE = re.compile(r"[^a-z0-9]+")
+
+
+def drop_syndicated(df: pd.DataFrame, sources: list[str]) -> pd.DataFrame:
+    """Collapse the same headline published by several outlets to its earliest copy."""
+    news = df["source"].isin(sources) & df["title"].notna()
+    if not news.any():
+        return df
+    key = df.loc[news, "title"].str.lower().map(lambda t: _HEADLINE.sub(" ", t).strip())
+    posts = df.loc[news].assign(_key=key).sort_values("created_at").drop_duplicates("post_id")
+    keep = set(posts.drop_duplicates("_key")["post_id"])
+    return df[~news | df["post_id"].isin(keep)]
+
+
+def news_quality(df: pd.DataFrame, ncfg: dict, name_keys: dict[str, list[str]]) -> pd.DataFrame:
+    """Add `news_kind` and a `quality` multiplier for news rows (1.0 for everything else).
+
+    Kind weights come from config (price_recap is 0: dropped). A story tagged to a
+    ticker it never mentions gets the off-topic weight on top.
+    """
+    quality = pd.Series(1.0, index=df.index)
+    kinds = pd.Series(None, index=df.index, dtype=object)
+    news = df["source"].isin(ncfg.get("sources", ["news"]))
+    if news.any():
+        per_post = {pid: classify(t, b, o) for pid, t, b, o in
+                    df.loc[news, ["post_id", "title", "body", "community"]].drop_duplicates("post_id").itertuples(index=False)}
+        kinds[news] = df.loc[news, "post_id"].map(per_post)
+        quality[news] = kinds[news].map(ncfg["kind_weights"]).fillna(1.0)
+        off = [not is_about(r.ticker, r.title, r.body, name_keys.get(r.ticker, []))
+               for r in df.loc[news, ["ticker", "title", "body"]].itertuples(index=False)]
+        quality[news] *= np.where(off, ncfg["off_topic_weight"], 1.0)
+    return df.assign(news_kind=kinds, quality=quality)
+
+
 def add_post_weight(df: pd.DataFrame, cfg: dict) -> pd.DataFrame:
-    """weight = log(1 + engagement) * author_weight * source_weight.
+    """weight = log(1 + engagement) * author_weight * quality * source_weight.
 
     Sources without engagement counts (news) get a floor from config, so their
     weight isn't zero just because nobody can upvote a headline.
@@ -132,17 +170,22 @@ def add_post_weight(df: pd.DataFrame, cfg: dict) -> pd.DataFrame:
     engagement = np.maximum(df["engagement"].astype(float).fillna(0).clip(lower=0), floors)
     source_weight = df["source"].map(cfg["source_weights"]).fillna(1.0)
     author_w = author_weights(df, noise)
+    quality = df["quality"] if "quality" in df else 1.0
     return df.assign(author_weight=author_w,
-                     weight=np.log1p(engagement) * author_w * source_weight)
+                     weight=np.log1p(engagement) * author_w * quality * source_weight)
 
 
-def cap_per_author(df: pd.DataFrame, k: int, period_col: str) -> pd.DataFrame:
+def cap_per_author(df: pd.DataFrame, k: int, period_col: str, sources: list[str] | None = None) -> pd.DataFrame:
     """Keep at most `k` posts per (period, ticker, author), highest weight first.
 
-    Stops one prolific account from manufacturing attention. Posts by deleted
-    accounts (no author_id) can't be grouped, so they aren't capped.
+    Stops one prolific account from manufacturing attention. Only applies to
+    `sources` (social ones): for news the "author" is the outlet, and an outlet
+    publishing a lot about a company is the attention signal, not spam. Posts by
+    deleted accounts (no author_id) can't be grouped, so they aren't capped.
     """
     known = df["author_id"].notna()
+    if sources is not None:
+        known &= df["source"].isin(sources)
     ranked = (
         df[known].sort_values("weight", ascending=False)
         .groupby([period_col, "ticker", "author_id"], sort=False)
@@ -151,15 +194,21 @@ def cap_per_author(df: pd.DataFrame, k: int, period_col: str) -> pd.DataFrame:
     return pd.concat([ranked, df[~known]]).sort_index()
 
 
-def apply_noise_filters(df: pd.DataFrame, cfg: dict) -> pd.DataFrame:
-    """Steps 1-4 (the cap is applied by the caller, which knows the period)."""
+def apply_noise_filters(df: pd.DataFrame, cfg: dict,
+                        name_keys: dict[str, list[str]] | None = None) -> pd.DataFrame:
+    """Steps 1-5 (the cap is applied by the caller, which knows the period)."""
     noise = cfg.get("noise", {})
     df = drop_reposts(df)
     nd = noise.get("near_duplicates")
     if nd:
         df = drop_near_duplicates(df, nd["max_hamming"], nd["min_words"])
     df = drop_spam(df, noise.get("spam_patterns", []))
+    ncfg = noise.get("news")
+    if ncfg:
+        df = drop_syndicated(df, ncfg.get("sources", ["news"]))
+        df = news_quality(df, ncfg, name_keys or {})
     df = add_post_weight(df, cfg)
-    # An author weight of 0 means "drop" (e.g. brand-new accounts, if so configured).
-    # Zero *engagement* is different: the post still counts as a mention.
-    return df[df["author_weight"] > 0]
+    # A weight factor of 0 means "drop": brand-new accounts if so configured, or
+    # price-recap news. Zero *engagement* is different: the post still counts.
+    quality = df["quality"] if "quality" in df else 1.0
+    return df[(df["author_weight"] * quality) > 0]

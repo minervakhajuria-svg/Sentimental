@@ -1,0 +1,41 @@
+# Invented headlines in the styles seen in real news feeds, with the kind the
+# classifier should assign. Includes traps for each rule.
+
+# --- price recaps (dropped: they narrate moves that already happened) -------
+- {title: "Why Acme Robotics Stock Plunged 18% This Week", kind: price_recap}
+- {title: "Why Did ACME, BOLT, CRWN Stocks Rise To 52-Week Highs Last Week?", kind: price_recap}
+- {title: "How Bolt Energy Stock Gained 22.5% in September", kind: price_recap}
+- {title: "Crown Mining (TSX:CRN) Is Down 7.9% After Securing a New Permit", kind: price_recap}
+- {title: "Delta Chips (DLTC) Climbed, What Is Behind The Fresh Attention?", kind: price_recap}
+- {title: "Echo Pharma Soars 140% in Q3: Can the Rally Last?", kind: price_recap}
+- {title: "Fox Payments Starts November 5% Below Its High. Here's What Changed", kind: price_recap}
+- {title: "Gamma Coin Is Up 40% in 90 Days but Still Down 25% From Last Year", kind: price_recap}
+- {title: "What's Going On With Halo Biotech Stock?", kind: price_recap}
+
+# --- promotion: listicles and buy/sell pitches (down-weighted) ----------------
+- {title: "3 Dividend Stocks to Buy and Hold for the Next Decade", kind: promo}
+- {title: "Is Acme Robotics (ACME) Stock a Buy Right Now?", kind: promo}
+- {title: "Better High-Yield Stock: Bolt Energy or Crown Mining?", kind: promo}
+- {title: "You Can Do Better Than Delta Chips. Buy Echo Pharma Instead.", kind: promo}
+- {title: "Could Investing $5,000 in Fox Payments Make You a Millionaire?", kind: promo}
+- {title: "Here's How Much You'd Need to Invest to Earn $300 a Month in Dividends", kind: promo}
+- {title: "Halo Biotech Is My Top Healthcare Pick for 2027", kind: promo}
+- {title: "Don't Sell Acme Robotics: Here's Why I'm Still Buying", kind: promo}
+- {title: "With Shares Down 35% This Year, Is It Time to Buy Bolt Energy?", kind: promo}  # quoted move, but a pitch
+- {title: "1 Unstoppable Stock to Buy Before It Soars 200%", kind: promo}
+
+# --- press releases (down-weighted) --------------------------------------------
+- {title: "Acme Robotics Announces Third-Quarter Results Date", kind: press_release}
+- {title: "Bolt Energy Declares Quarterly Cash Dividend", kind: press_release}
+- {title: "Crown Mining to Present at Annual Resources Conference", kind: press_release}
+- {title: "Delta Chips Prices $500 Million Senior Notes Offering", kind: press_release}
+- {title: "Echo Pharma Completes Acquisition of Small Lab", outlet: "GlobeNewswire", kind: press_release}
+
+# --- genuine news, including traps ----------------------------------------------
+- {title: "Acme Robotics Wins $2 Billion Defense Contract", kind: news}
+- {title: "Regulators Open Probe Into Bolt Energy Pricing", kind: news}
+- {title: "Analyst Sees 40% Upside in Crown Mining After Reserve Update", kind: news}   # target, not a move
+- {title: "Fund Yielding Up To 12% Draws Income Investors", kind: news}               # "up to" isn't a move
+- {title: "Delta Chips Could Surge 150% if Its New Product Lands, Analyst Says", kind: news}  # forecast
+- {title: "Echo Pharma, Fox Payments Among 12 Companies To Announce Dividend Hikes", kind: news}  # 'among': not a release
+- {title: "Halo Biotech CEO Warns of Slowing Growth", kind: news}

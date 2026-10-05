@@ -235,7 +235,16 @@ def community_bars(df: pd.DataFrame) -> str:
     return f'<div class="sm-bars">{"".join(rows)}</div>'
 
 
+NEWS_KIND_LABELS = {
+    "price_recap": ("PRICE RECAP · EXCLUDED", RED),
+    "promo": ("PROMO / OPINION · DOWN-WEIGHTED", MUTED),
+    "press_release": ("PRESS RELEASE · DOWN-WEIGHTED", MUTED),
+}
+
+
 def post_list(df: pd.DataFrame) -> str:
+    from signals.news_quality import classify  # same rules the ranking uses
+
     rows = []
     for r in df.itertuples():
         color = tone_color(r.sentiment)
@@ -243,10 +252,18 @@ def post_list(df: pd.DataFrame) -> str:
                 else f"{arrow(r.sentiment, 0.1)} {r.sentiment:+.2f}<br>{tone_word(r.sentiment).upper()}")
         when = pd.Timestamp(r.created_at).strftime("%d %b %H:%M")
         link = escape(r.url or "#", quote=True)
+        if r.source == "news":
+            meta = "news"
+            kind = NEWS_KIND_LABELS.get(classify(r.title, None, r.community))
+            if kind:
+                meta += f' · <span style="color:{kind[1]}">{kind[0]}</span>'
+        else:
+            meta = f"{int(r.engagement or 0)} engagement"
+        meta += f" · matched by {escape(str(r.match_type))}"
         rows.append(
             f'<div class="sm-post"><div class="src">{escape(source_label(r.source, r.community)).upper()}<br>{when}</div>'
             f'<div class="txt"><a href="{link}" target="_blank" rel="noopener noreferrer">{escape(r.title or "(no title)")}</a>'
-            f'<div class="meta">{int(r.engagement or 0)} engagement · matched by {escape(str(r.match_type))}</div></div>'
+            f'<div class="meta">{meta}</div></div>'
             f'<div class="tone" style="color:{color}">{tone}</div></div>'
         )
     return f'<div class="sm-posts">{"".join(rows)}</div>'

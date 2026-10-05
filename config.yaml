@@ -13,6 +13,7 @@ collect:
   lookback_hours: 36
 
 reddit:
+  enabled: false             # access request rejected 2026-10-05; Reddit is closing RSS and public API too
   communities:
     - wallstreetbets
     - stocks
@@ -32,7 +33,8 @@ reddit:
 
 news:
   enabled: true              # needs FINNHUB_API_KEY in .env (free, personal use)
-  max_tickers: 50            # one request each per run
+  max_tickers: 1000          # one request each per run; ~20 min at the free 60/min limit
+  max_failure_share: 0.05    # a few tickers failing is normal; above this the run reports partial
   mention_lookback_days: 7   # pick the most-mentioned tickers from this window
   pause_seconds: 1.1         # free tier: 60 calls/minute
 
@@ -99,6 +101,7 @@ signals:
     news: 1.0
     stocktwits: 1.0
   author_cap_per_ticker_week: 5
+  author_cap_sources: [reddit, stocktwits]   # news "authors" are outlets: not capped
   noise:
     # News has no upvotes: treat each article as if it had this much engagement.
     engagement_floor:
@@ -126,6 +129,14 @@ signals:
         new_account_weight: 0.25
         min_karma: 5
         low_karma_weight: 0.5
+    news:                    # see src/signals/news_quality.py
+      sources: [news]
+      kind_weights:
+        price_recap: 0.0     # "why X stock jumped": echoes past price; dropped entirely
+        promo: 0.3           # listicles and buy/sell pitches
+        press_release: 0.5   # company announcements: facts, but always upbeat
+        news: 1.0
+      off_topic_weight: 0.3  # tagged to a ticker the story never names
     bots:                    # more posts than this in a week looks automated
       sources: [reddit, stocktwits]
       max_posts_per_week: 40
@@ -134,9 +145,10 @@ signals:
   # Baseline std floor (in weighted mentions/day) so quiet tickers don't blow up.
   attention_std_floor: 1.0
   attention_clip: 10
-  # Eligibility
-  min_weekly_mentions: 20
-  min_distinct_authors: 5
+  # Eligibility. Set for news-first: Finnhub attributes most articles to one
+  # aggregator ("Yahoo"), so distinct authors (= outlets) can't be required.
+  min_weekly_mentions: 5
+  min_distinct_authors: 1
   composite_weights:
     attention: 0.35
     sentiment: 0.35

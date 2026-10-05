@@ -50,13 +50,16 @@ class FinnhubNewsCollector(Collector):
         self._now = now
         self.failed_communities: list[str] = []
         self.communities: list[str] = []
+        self.failure_tolerance = 0.0  # share of tickers allowed to fail before the run is "partial"
 
     @classmethod
     def from_config(cls, cfg: dict, tickers: Callable[[], list[str]]) -> "FinnhubNewsCollector":
         key = os.environ.get("FINNHUB_API_KEY")
         if not key:
             raise RuntimeError("Missing FINNHUB_API_KEY in .env (free key at finnhub.io)")
-        return cls(key, tickers, pause_seconds=cfg.get("pause_seconds", 1.1))
+        c = cls(key, tickers, pause_seconds=cfg.get("pause_seconds", 1.1))
+        c.failure_tolerance = cfg.get("max_failure_share", 0.0)
+        return c
 
     def fetch(self, since: datetime) -> Iterable[Post]:
         tickers = self._tickers()
