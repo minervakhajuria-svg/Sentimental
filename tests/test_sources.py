@@ -160,3 +160,22 @@ def test_source_tagged_posts_still_get_extracted(con):
     db.add_source_tags(con, posts, 0.9, universe={"TSLA"})
     pending = {r[0] for r in db.posts_without_tickers(con)}
     assert pending == {p.id for p in posts}
+
+
+def test_news_pacing_targets_rate_not_fixed_pause():
+    """Sleeps only for what's left of each interval after the request itself."""
+    t = [0.0]
+    sleeps = []
+
+    def fake_get(url, params=None, headers=None, sleep=None):
+        t[0] += 0.7          # each request takes 0.7 s
+        return []
+
+    def fake_sleep(s):
+        sleeps.append(round(s, 3))
+        t[0] += s
+
+    c = FinnhubNewsCollector("KEY", lambda: ["A", "B", "C"], requests_per_minute=60,
+                             get=fake_get, sleep=fake_sleep, clock=lambda: t[0], now=lambda: NOW)
+    list(c.fetch(SINCE))
+    assert sleeps == [0.3, 0.3]   # 1.0 s interval minus 0.7 s spent in the request

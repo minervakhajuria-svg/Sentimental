@@ -33,10 +33,10 @@ reddit:
 
 news:
   enabled: true              # needs FINNHUB_API_KEY in .env (free, personal use)
-  max_tickers: 1000          # one request each per run; ~20 min at the free 60/min limit
+  max_tickers: 1000          # one request each per run; ~18 min at 55 requests/min
   max_failure_share: 0.05    # a few tickers failing is normal; above this the run reports partial
   mention_lookback_days: 7   # pick the most-mentioned tickers from this window
-  pause_seconds: 1.1         # free tier: 60 calls/minute
+  requests_per_minute: 55    # free tier allows 60/minute; small safety margin
 
 stocktwits:
   enabled: false             # needs STOCKTWITS_ACCESS_TOKEN from an approved app

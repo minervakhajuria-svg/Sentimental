@@ -130,7 +130,7 @@ def test_one_source_missing_credentials_does_not_stop_others(cfg, monkeypatch):
     from tickers.universe import save_universe
     cfg.update({
         "reddit": {"communities": ["stocks"]},
-        "news": {"enabled": True, "max_tickers": 5, "mention_lookback_days": 7, "pause_seconds": 0},
+        "news": {"enabled": True, "max_tickers": 5, "mention_lookback_days": 7, "requests_per_minute": 6000},
         "stocktwits": {"enabled": False},
         "universe": {"exchanges": ["NASDAQ"], "min_market_cap": 1, "min_avg_dollar_volume": 1},
         "extraction": {"confidence": {"cashtag": 0.95, "alias": 0.75, "bare": 0.5, "source": 0.9},

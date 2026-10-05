@@ -1,6 +1,6 @@
 """Company news from Finnhub's free API (personal, non-commercial use).
 
-One request per ticker per run, paced under the free tier's 60 calls/minute.
+One request per ticker per run, paced to stay under the free tier's 60 calls/minute.
 Finnhub says which ticker each article is about (its `related` field), so
 those become source-supplied ticker tags.
 
@@ -36,14 +36,18 @@ class FinnhubNewsCollector(Collector):
         self,
         api_key: str,
         tickers: Callable[[], list[str]],
-        pause_seconds: float = 1.1,
+        requests_per_minute: float = 55,
         get: Callable | None = None,
         sleep: Callable[[float], None] = time.sleep,
         now: Callable[[], datetime] = lambda: datetime.now(timezone.utc).replace(tzinfo=None),
+        clock: Callable[[], float] = time.monotonic,
     ):
         self._key = api_key
         self._tickers = tickers  # called at fetch time, so it sees the latest DB state
-        self.pause_seconds = pause_seconds
+        # Pace request *starts* to the rate limit. A fixed pause after each call
+        # would add the request's own latency on top and roughly halve throughput.
+        self.interval = 60.0 / requests_per_minute
+        self._clock = clock
         # Looked up at construction (not as a default arg) so tests can swap it.
         self._get = get if get is not None else get_json
         self._sleep = sleep
@@ -57,7 +61,7 @@ class FinnhubNewsCollector(Collector):
         key = os.environ.get("FINNHUB_API_KEY")
         if not key:
             raise RuntimeError("Missing FINNHUB_API_KEY in .env (free key at finnhub.io)")
-        c = cls(key, tickers, pause_seconds=cfg.get("pause_seconds", 1.1))
+        c = cls(key, tickers, requests_per_minute=cfg.get("requests_per_minute", 55))
         c.failure_tolerance = cfg.get("max_failure_share", 0.0)
         return c
 
@@ -69,9 +73,13 @@ class FinnhubNewsCollector(Collector):
         start: date = since.date()
         end: date = self._now().date()
         seen: dict[str, Post] = {}
-        for i, ticker in enumerate(tickers):
-            if i:
-                self._sleep(self.pause_seconds)
+        last_start = None
+        for ticker in tickers:
+            if last_start is not None:
+                wait = self.interval - (self._clock() - last_start)
+                if wait > 0:
+                    self._sleep(wait)
+            last_start = self._clock()
             try:
                 items = self._get(
                     FINNHUB_NEWS_URL,
