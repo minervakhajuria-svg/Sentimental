@@ -6,7 +6,7 @@ A personal research tool that scans online discussion about US-listed stocks and
 
 ## How it works
 
-1. **Collect daily:** Reddit posts (six investing subreddits), company news (Finnhub), and StockTwits when access is available. Each post is tagged with the tickers it mentions.
+1. **Collect daily:** company news from Finnhub and [The GDELT Project](https://www.gdeltproject.org/) (worldwide media, with real publisher names), plus SEC 8-K and Form 4 filings. Reddit and StockTwits collectors exist but are off (no API access). Each article is tagged with the tickers it's about.
 2. **Score:** FinBERT runs locally on every (post, ticker) pair. An optional Claude second pass re-reads ambiguous and high-engagement posts, which helps with sarcasm and options slang.
 3. **Rank weekly:** attention vs each ticker's own baseline, sentiment, momentum and breadth, after removing reposts, spam and bot-like accounts. The output is two lists: *heating up, bullish* and *heating up, bearish*.
 4. **Context:** 5- and 30-day returns, relative volume, an early-chatter flag (talk rising before price moves), and recent insider purchases from SEC Form 4 filings.
@@ -47,3 +47,7 @@ To preview the app without collected data: `python tests/demo_data.py`, then set
 ## Development
 
 `pytest` runs the suite against saved fixtures; tests block all network access. Settings and thresholds live in `config.yaml`. The full spec and the design decisions are in `CLAUDE.md`.
+
+## Data sources and attribution
+
+News data includes **[The GDELT Project](https://www.gdeltproject.org/)** (free for any use, with citation), **Finnhub** company news (free personal-use tier) and **SEC EDGAR** filings. Prices come from Yahoo Finance via `yfinance`. The app footer carries the same attribution.

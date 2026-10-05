@@ -20,6 +20,7 @@ from typing import Callable
 import duckdb
 
 from collectors.base import Collector
+from collectors.gdelt import GdeltCollector, build_matcher
 from collectors.news import FinnhubNewsCollector
 from collectors.reddit import RedditCollector, utc_now
 from collectors.stocktwits import StockTwitsCollector
@@ -30,6 +31,7 @@ from market.insiders import EdgarClient
 from market.prices import MarketDataProvider
 from settings import load_config, setup_logging
 from storage import db
+from tickers.extractor import load_aliases
 from tickers.universe import load_universe
 
 log = logging.getLogger("jobs.collect_daily")
@@ -64,11 +66,15 @@ def build_collectors(cfg: dict, con: duckdb.DuckDBPyConnection) -> tuple[list[Co
             cfg["news"], ticker_list(con, cfg, cfg["news"]["max_tickers"])),
         "stocktwits": lambda: StockTwitsCollector.from_config(
             cfg["stocktwits"], ticker_list(con, cfg, cfg["stocktwits"]["max_tickers"])),
+        "gdelt": lambda: GdeltCollector.from_config(
+            cfg["gdelt"], con,
+            lambda: build_matcher(db.universe_by_liquidity(con, cfg["universe"]), load_aliases(),
+                                  cfg["gdelt"].get("exclude_orgs", []))),
     }
     collectors, failed = [], 0
     for name, build in builders.items():
-        if not cfg.get(name, {}).get("enabled", True):
-            continue
+        if name not in cfg or not cfg[name].get("enabled", True):
+            continue  # no config section = source not set up
         try:
             collectors.append(build())
         except Exception as e:

@@ -102,3 +102,13 @@ CREATE TABLE IF NOT EXISTS sec_filings (
 -- existing databases working without a manual migration.
 ALTER TABLE weekly_signals ADD COLUMN IF NOT EXISTS events TEXT;      -- 8-K categories that week
 ALTER TABLE weekly_signals ADD COLUMN IF NOT EXISTS red_flag BOOLEAN; -- a red-flag 8-K that week
+
+-- GDELT 15-minute GKG files already processed (or found missing), so each is
+-- downloaded once and late files are retried.
+CREATE TABLE IF NOT EXISTS gdelt_files (
+    stamp      TEXT PRIMARY KEY,         -- YYYYMMDDHHMMSS (UTC)
+    status     TEXT NOT NULL,            -- done | missing | error
+    rows       INTEGER,
+    matched    INTEGER,
+    checked_at TIMESTAMP
+);

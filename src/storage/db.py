@@ -299,3 +299,13 @@ EFFECTIVE_SCORES = """(
 def as_models(model) -> list[str]:
     """Accept one model name or a priority list."""
     return [model] if isinstance(model, str) else list(model)
+
+
+def universe_by_liquidity(con: duckdb.DuckDBPyConnection, cfg: dict) -> list[tuple[str, str]]:
+    """(ticker, company_name) passing the floors, most traded first."""
+    return con.execute(
+        """SELECT ticker, company_name FROM ticker_universe
+           WHERE exchange IN (SELECT unnest(?)) AND market_cap >= ? AND avg_dollar_volume_30d >= ?
+           ORDER BY avg_dollar_volume_30d DESC""",
+        [cfg["exchanges"], cfg["min_market_cap"], cfg["min_avg_dollar_volume"]],
+    ).fetchall()

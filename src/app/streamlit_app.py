@@ -41,5 +41,8 @@ nav.run()
 st.sidebar.markdown(f'<div class="sm-footer" style="margin-top:24px">{views.DISCLAIMER}</div>',
                     unsafe_allow_html=True)
 st.divider()
-st.markdown(f'<div class="sm-footer">{views.APP_NAME} · {views.DISCLAIMER}</div>',
+st.markdown(f'<div class="sm-footer">{views.APP_NAME} · {views.DISCLAIMER}</div>'
+            '<div class="sm-footer" style="margin-top:6px;text-transform:none;letter-spacing:0">'
+            'News data includes <a href="https://www.gdeltproject.org/" target="_blank" '
+            'rel="noopener noreferrer">The GDELT Project</a>, Finnhub and SEC EDGAR.</div>',
             unsafe_allow_html=True)

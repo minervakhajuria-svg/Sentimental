@@ -38,6 +38,15 @@ news:
   mention_lookback_days: 7   # pick the most-mentioned tickers from this window
   requests_per_minute: 55    # free tier allows 60/minute; small safety margin
 
+gdelt:
+  enabled: true              # free bulk news files; cite GDELT (done in the app and README)
+  files_per_hour: 4          # 4 = every 15-minute file (~300-500 MB/day); 1-3 samples to save bandwidth
+  give_up_after_hours: 48    # GDELT publishes late sometimes: retry missing files this long
+  min_title_chars: 20        # skip articles without a usable headline
+  pause_seconds: 1.0         # politeness between file downloads
+  # Organization names that are rarely about the listed company itself.
+  exclude_orgs: [nasdaq, nasdaq stock market, new york stock exchange]
+
 stocktwits:
   enabled: false             # needs STOCKTWITS_ACCESS_TOKEN from an approved app
   max_tickers: 30
