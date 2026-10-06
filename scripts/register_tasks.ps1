@@ -1,8 +1,8 @@
-# Registers two Windows scheduled tasks for the current user:
-#   Sentimental-Daily   every day at 07:00 local time
+﻿# Registers two Windows scheduled tasks for the current user:
+#   Sentimental-Daily   every day at 21:00 local time (the laptop sleeps overnight)
 #   Sentimental-Weekly  Saturdays at 10:00 local time
 # They run only while you're logged in (no stored password) and catch up if the
-# PC was off at the scheduled time. Remove with:  .\scripts\register_tasks.ps1 -Remove
+# PC was off at the scheduled time, on battery too. Remove with:  .\scripts\register_tasks.ps1 -Remove
 param([switch]$Remove)
 $root = Split-Path $PSScriptRoot -Parent
 $names = "Sentimental-Daily", "Sentimental-Weekly"
@@ -13,7 +13,7 @@ if ($Remove) {
     exit 0
 }
 
-$settings = New-ScheduledTaskSettingsSet -StartWhenAvailable -ExecutionTimeLimit (New-TimeSpan -Hours 4) `
+$settings = New-ScheduledTaskSettingsSet -StartWhenAvailable -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -ExecutionTimeLimit (New-TimeSpan -Hours 4) `
     -RestartCount 2 -RestartInterval (New-TimeSpan -Minutes 30)
 
 function New-JobAction($script) {
@@ -22,7 +22,7 @@ function New-JobAction($script) {
 }
 
 Register-ScheduledTask -TaskName "Sentimental-Daily" -Action (New-JobAction "run_daily.ps1") `
-    -Trigger (New-ScheduledTaskTrigger -Daily -At 7:00am) -Settings $settings `
+    -Trigger (New-ScheduledTaskTrigger -Daily -At 9:00pm) -Settings $settings `
     -Description "Sentimental: daily collection" -Force | Out-Null
 Register-ScheduledTask -TaskName "Sentimental-Weekly" -Action (New-JobAction "run_weekly.ps1") `
     -Trigger (New-ScheduledTaskTrigger -Weekly -DaysOfWeek Saturday -At 10:00am) -Settings $settings `

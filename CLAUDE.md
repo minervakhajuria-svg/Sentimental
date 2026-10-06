@@ -112,7 +112,7 @@ Panel of weekly signals with prior/same/next-week returns from Friday closes (ho
 
 ## 14. Operations
 - **Keys in `.env`:** `FINNHUB_API_KEY` (set), `SEC_USER_AGENT` (set), optional `ANTHROPIC_API_KEY`; Reddit/StockTwits blank.
-- **Scheduled tasks** (registered 2026-10-04, run while logged in, catch up if missed): `Sentimental-Daily` 07:00 (`run_daily.ps1` → collect_daily: Finnhub, GDELT, ticker tagging, SEC filings, prices; ~30 min) and `Sentimental-Weekly` Saturday 10:00 (`run_weekly.ps1` → build_universe, rank_weekly incl. FinBERT, run_analysis). Remove with `register_tasks.ps1 -Remove`. On 2026-10-05 the 07:00 run was missed (PC likely off); consider an evening time.
+- **Scheduled tasks** (registered 2026-10-04, run while logged in, catch up if missed, allowed on battery): `Sentimental-Daily` 21:00 (moved from 07:00 on 2026-10-06: the laptop sleeps overnight) (`run_daily.ps1` → collect_daily: Finnhub, GDELT, ticker tagging, SEC filings, prices; ~30 min) and `Sentimental-Weekly` Saturday 10:00 (`run_weekly.ps1` → build_universe, rank_weekly incl. FinBERT, run_analysis). Remove with `register_tasks.ps1 -Remove`.
 - **Exit codes:** 0 ok, 2 partial (data kept), 1 failed. Logs in `logs/<job>.log`.
 - Manual: `python -m jobs.collect_filings [--days N]`, `jobs.collect_prices [--days N]`, `jobs.extract_tickers --rebuild` (after editing aliases/blocklist), `jobs.rank_weekly [--week-ending YYYY-MM-DD] [--no-score]`, `analysis.scorer_check`.
 - Run commands in **PowerShell** opened in the project folder (not the Python `>>>` prompt).
