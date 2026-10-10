@@ -189,25 +189,27 @@ def upsert_prices(con: duckdb.DuckDBPyConnection, bars) -> int:
     """
     if bars is None or len(bars) == 0:
         return 0
-    rows = [
-        [r.ticker, r.date, r.open, r.high, r.low, r.close,
-         None if r.volume != r.volume else int(r.volume)]
-        for r in bars[PRICE_COLUMNS].itertuples(index=False)
-    ]
+    # One set-based statement: DuckDB runs executemany as a statement per row,
+    # which took 45+ minutes for ~50,000 bars.
+    df = bars[PRICE_COLUMNS].drop_duplicates(["ticker", "date"], keep="last").copy()
+    df["date"] = pd.to_datetime(df["date"]).dt.date
+    df["volume"] = df["volume"].round().astype("Int64")
+    con.register("_bars", df)
     con.execute("BEGIN TRANSACTION")
     try:
-        con.executemany(
-            f"""INSERT INTO prices_daily ({", ".join(PRICE_COLUMNS)}) VALUES (?, ?, ?, ?, ?, ?, ?)
+        con.execute(
+            f"""INSERT INTO prices_daily ({", ".join(PRICE_COLUMNS)})
+                SELECT {", ".join(PRICE_COLUMNS)} FROM _bars
                 ON CONFLICT (ticker, date) DO UPDATE SET
                     open = excluded.open, high = excluded.high, low = excluded.low,
-                    close = excluded.close, volume = excluded.volume""",
-            rows,
-        )
+                    close = excluded.close, volume = excluded.volume""")
         con.execute("COMMIT")
     except Exception:
         con.execute("ROLLBACK")
         raise
-    return len(rows)
+    finally:
+        con.unregister("_bars")
+    return len(df)
 
 
 def load_prices(con: duckdb.DuckDBPyConnection, tickers: list[str], start, end):
